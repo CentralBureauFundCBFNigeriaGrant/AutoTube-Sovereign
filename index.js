@@ -1,3 +1,7 @@
+const crypto = require('crypto');
+// This fixes the "crypto is not defined" error in Node environments
+if (!global.crypto) { global.crypto = crypto; }
+
 const { MsEdgeTTS } = require('msedge-tts');
 const fs = require('fs');
 
@@ -27,7 +31,7 @@ async function generateAudio(text, outputFileName) {
 // --- MAIN ENGINE ---
 async function runAutoTube() {
     try {
-        const script = "Checking the connection. If you hear this, the automation is finally working without the billing error.";
+        const script = "Checking the connection again. If you hear this, the crypto error is officially gone.";
         const output = "voiceover.mp3";
 
         console.log("🚀 Starting AutoTube...");
