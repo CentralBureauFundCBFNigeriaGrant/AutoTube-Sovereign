@@ -1,0 +1,33 @@
+name: AutoTube Daily Bake
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # This triggers it automatically at Midnight UTC every day
+  workflow_dispatch:      # This adds a "Run" button so you can start it manually
+
+jobs:
+  bake-video:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run AutoTube Engine
+        env:
+          # This connects your GitHub Secrets to the Code
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+        run: node index.js
+      
