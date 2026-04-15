@@ -1,46 +1,41 @@
 name: AutoTube Engine Run
 
 on:
-  workflow_dispatch: # Manual trigger for testing
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 2. Setup Node.js Environment
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: 3. Install System Dependencies (FFmpeg + Fonts)
-        # We need libass and fonts-dejavu to render the subtitles onto the video
+      - name: Install System Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg libass-dev fonts-dejavu
 
-      - name: 4. Install Node Dependencies
+      - name: Install Dependencies
         run: npm install
 
-      - name: 5. Execute Audio Engine
-        # This generates the voiceover.mp3
+      - name: 1. Generate Voice
         run: node index.js
 
-      - name: 6. Execute Video Engine
-        # This pulls AI visuals, mixes BGM, and burns subtitles
+      - name: 2. Mix Audio & Music
+        run: node audio-mixer.js
+
+      - name: 3. Render Final Video
         run: node video-engine.js
 
-      - name: 7. Upload Production Assets
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: AutoTube-Daily-Content
-          path: |
-            final_video.mp4
-            voiceover.mp3
-            subtitles.srt
-            ai_visual.jpg
-          retention-days: 1
+          name: AutoTube-Result
+          path: final_video.mp4
           
