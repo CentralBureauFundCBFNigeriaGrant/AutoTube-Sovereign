@@ -7,8 +7,9 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "ms-edge-tts": "^1.2.0"
+    "msedge-tts": "^2.0.0"
   },
   "author": "Olanrewaju Richard",
   "license": "ISC"
 }
+
