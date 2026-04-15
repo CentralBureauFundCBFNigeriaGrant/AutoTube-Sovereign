@@ -1,17 +1,14 @@
 {
-  "name": "autotube-v7-backend",
-  "version": "7.0.0",
-  "description": "Autonomous YouTube Automation SaaS",
+  "name": "autotube-engine",
+  "version": "1.0.0",
+  "description": "AI Video Automation Engine",
   "main": "index.js",
-  "dependencies": {
-    "axios": "^1.6.0",
-    "dotenv": "^16.3.1",
-    "groq-sdk": "^0.3.0",
-    "googleapis": "^126.0.0",
-    "@google-cloud/text-to-speech": "^5.0.0"
-  },
   "scripts": {
     "start": "node index.js"
-  }
+  },
+  "dependencies": {
+    "ms-edge-tts": "^1.2.0"
+  },
+  "author": "Olanrewaju Richard",
+  "license": "ISC"
 }
-
