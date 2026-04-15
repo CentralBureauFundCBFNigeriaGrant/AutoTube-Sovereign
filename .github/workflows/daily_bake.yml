@@ -1,41 +1,52 @@
 name: AutoTube Engine Run
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Allows you to run it manually from the "Actions" tab
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: 1. Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: 2. Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install System Tools
+      - name: 3. Install FFmpeg & Subtitle Fonts
+        # CRITICAL: We need libass and fonts for the subtitles to burn correctly
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg libass-dev fonts-dejavu
 
-      - name: Install Dependencies
+      - name: 4. Install Dependencies
         run: npm install
 
-      - name: 1. Generate Voice
+      - name: 5. Generate Voice (Step 1)
         run: node index.js
 
-      - name: 2. Mix Audio & Music
+      - name: 6. Mix Audio (Step 2)
         run: node audio-mixer.js
 
-      - name: 3. Render Final Video
+      - name: 7. Render Video (Step 3)
         run: node video-engine.js
 
-      - name: Upload
+      - name: 8. Debug File Check
+        # This list command helps us see if the files actually exist in the folder
+        run: ls -R
+
+      - name: 9. Upload Final Assets
         uses: actions/upload-artifact@v4
         with:
-          name: AutoTube-Result
-          path: final_video.mp4
+          name: AutoTube-Production-Package
+          path: |
+            final_video.mp4
+            mixed_audio.mp3
+            ai_visual.jpg
+            subtitles.srt
+          if-no-files-found: error # This will tell us EXACTLY which file failed to generate
+          retention-days: 5
           
