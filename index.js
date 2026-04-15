@@ -1,69 +1,34 @@
-// --- 1. THE CRYPTO ENGINE FIX ---
-const { webcrypto } = require('node:crypto');
-if (!global.crypto) {
-    global.crypto = webcrypto;
-}
-
-// --- 2. THE TTS ENGINE ---
-const { MsEdgeTTS } = require('msedge-tts');
 const fs = require('fs');
+const gTTS = require('gtts'); // Or whatever voice engine you are using
 
-/**
- * Generates audio by extracting the specific audioStream from the result object.
- */
-async function generateAudio(text, outputFileName) {
-    const tts = new MsEdgeTTS();
+async function generateContent() {
+    // 1. THE SCRIPT (This is what will be spoken and shown in subtitles)
+    const scriptText = "Welcome to the future of AI video creation. This content was generated entirely by code, from the script to the visuals.";
+    const duration = 10; // Expected duration in seconds
+
+    console.log("📝 Saving script metadata...");
+    const metadata = {
+        text: scriptText,
+        duration: duration
+    };
+    fs.writeFileSync('metadata.json', JSON.stringify(metadata, null, 2));
+
+    // 2. GENERATE VOICEOVER
+    console.log("🎙️ Generating Voiceover...");
+    const gtts = new gTTS(scriptText, 'en');
     
-    // Voice: en-US-GuyNeural is the standard reliable male voice
-    await tts.setMetadata("en-US-GuyNeural", "audio-24khz-48kbitrate-mono-mp3");
-
-    try {
-        console.log(`Generating audio for: "${text.substring(0, 30)}..."`);
-        
-        // FIX: toStream returns { audioStream, metadataStream }. We need the audioStream.
-        const result = await tts.toStream(text);
-        const audioStream = result.audioStream;
-
-        if (!audioStream) {
-            throw new Error("Audio stream could not be initialized.");
-        }
-
-        const out = fs.createWriteStream(outputFileName);
-        
-        return new Promise((resolve, reject) => {
-            audioStream.pipe(out);
-            
-            out.on('finish', () => {
-                console.log(`✅ Success: ${outputFileName} generated!`);
-                resolve();
-            });
-            
-            out.on('error', (err) => {
-                console.error("❌ Stream Write Error:", err);
+    return new Promise((resolve, reject) => {
+        gtts.save('voiceover.mp3', (err) => {
+            if (err) {
+                console.error("❌ Voice Generation Failed:", err);
                 reject(err);
-            });
+            } else {
+                console.log("✅ voiceover.mp3 ready.");
+                resolve();
+            }
         });
-    } catch (error) {
-        console.error("❌ Engine Runtime Error:", error);
-        throw error;
-    }
+    });
 }
 
-// --- 3. MAIN EXECUTION ---
-async function runAutoTube() {
-    try {
-        const script = "Live and direct! The engine is finally bypassing all errors. Ready for YouTube automation.";
-        const output = "voiceover.mp3";
-
-        console.log("🚀 Starting AutoTube Engine...");
-        await generateAudio(script, output);
-        console.log("🎉 MISSION COMPLETE: Check your files for voiceover.mp3");
-
-    } catch (err) {
-        console.error("🚨 Critical Failure:", err);
-        process.exit(1);
-    }
-}
-
-runAutoTube();
+generateContent();
 
