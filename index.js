@@ -1,49 +1,38 @@
-const { MsEdgeTTS } = require('ms-edge-tts');
+const { MsEdgeTTS } = require('msedge-tts');
 const fs = require('fs');
 
 /**
  * Generates audio from text using Microsoft Edge's free TTS engine.
- * No API Key or Billing required.
  */
 async function generateAudio(text, outputFileName) {
     const tts = new MsEdgeTTS();
     
-    // Voice: en-US-GuyNeural (Male) or en-US-AvaNeural (Female)
+    // Voice: en-US-GuyNeural (Male)
     await tts.setMetadata("en-US-GuyNeural", "audio-24khz-48kbitrate-mono-mp3");
 
     try {
-        console.log(`Starting audio generation for: "${text.substring(0, 30)}..."`);
+        console.log(`Generating audio: "${text.substring(0, 30)}..."`);
         
-        const readable = tts.push(text);
-        const out = fs.createWriteStream(outputFileName);
+        // This method saves the file directly
+        await tts.toFile(outputFileName, text);
         
-        readable.pipe(out);
-
-        return new Promise((resolve, reject) => {
-            out.on('finish', () => {
-                console.log(`✅ Success: Audio saved to ${outputFileName}`);
-                resolve();
-            });
-            out.on('error', (err) => {
-                console.error("❌ Stream Error:", err);
-                reject(err);
-            });
-        });
+        console.log(`✅ Success: ${outputFileName} created.`);
+        return true;
     } catch (error) {
-        console.error("❌ Edge-TTS Runtime Error:", error);
+        console.error("❌ Edge-TTS Error:", error);
         throw error;
     }
 }
 
-// --- MAIN ENGINE START ---
+// --- MAIN ENGINE ---
 async function runAutoTube() {
     try {
-        const script = "Hello! This is a test of the new free text to speech engine for our YouTube automation.";
+        const script = "Checking the connection. If you hear this, the automation is finally working without the billing error.";
         const output = "voiceover.mp3";
 
-        console.log("🚀 Initializing AutoTube Engine...");
+        console.log("🚀 Starting AutoTube...");
         await generateAudio(script, output);
-        console.log("🎉 Process Complete!");
+        console.log("🎉 Process Finished Successfully!");
 
     } catch (err) {
         console.error("🚨 Critical Failure:", err);
