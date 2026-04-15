@@ -1,43 +1,55 @@
-const textToSpeech = require('@google-cloud/text-to-speech');
+const { MsEdgeTTS } = require('ms-edge-tts');
 const fs = require('fs');
-const util = require('util');
 
-// This part handles your credentials properly
-let clientOptions = {};
-try {
-    // We check if the secret is a JSON string and parse it
-    const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS);
-    clientOptions = { credentials };
-    console.log("Credentials parsed successfully from environment variable.");
-} catch (e) {
-    // If it's not JSON (like a file path), we let the library try its default way
-    console.log("Using default credential path or file.");
+/**
+ * Generates audio from text using Microsoft Edge's free TTS engine.
+ * No API Key or Billing required.
+ */
+async function generateAudio(text, outputFileName) {
+    const tts = new MsEdgeTTS();
+    
+    // Voice: en-US-GuyNeural (Male) or en-US-AvaNeural (Female)
+    await tts.setMetadata("en-US-GuyNeural", "audio-24khz-48kbitrate-mono-mp3");
+
+    try {
+        console.log(`Starting audio generation for: "${text.substring(0, 30)}..."`);
+        
+        const readable = tts.push(text);
+        const out = fs.createWriteStream(outputFileName);
+        
+        readable.pipe(out);
+
+        return new Promise((resolve, reject) => {
+            out.on('finish', () => {
+                console.log(`✅ Success: Audio saved to ${outputFileName}`);
+                resolve();
+            });
+            out.on('error', (err) => {
+                console.error("❌ Stream Error:", err);
+                reject(err);
+            });
+        });
+    } catch (error) {
+        console.error("❌ Edge-TTS Runtime Error:", error);
+        throw error;
+    }
 }
 
-// Initialize the client with our options
-const client = new textToSpeech.TextToSpeechClient(clientOptions);
+// --- MAIN ENGINE START ---
+async function runAutoTube() {
+    try {
+        const script = "Hello! This is a test of the new free text to speech engine for our YouTube automation.";
+        const output = "voiceover.mp3";
 
-async function quickStart() {
-  // The text to synthesize
-  const text = 'hello, world!';
+        console.log("🚀 Initializing AutoTube Engine...");
+        await generateAudio(script, output);
+        console.log("🎉 Process Complete!");
 
-  // Construct the request
-  const request = {
-    input: {text: text},
-    // Select the language and SSML voice gender (optional)
-    voice: {languageCode: 'en-US', ssmlGender: 'NEUTRAL'},
-    // select the type of audio encoding
-    audioConfig: {audioEncoding: 'MP3'},
-  };
-
-  // Performs the text-to-speech request
-  const [response] = await client.synthesizeSpeech(request);
-  
-  // Write the binary audio content to a local file
-  const writeFile = util.promisify(fs.writeFile);
-  await writeFile('output.mp3', response.audioContent, 'binary');
-  console.log('Audio content written to file: output.mp3');
+    } catch (err) {
+        console.error("🚨 Critical Failure:", err);
+        process.exit(1);
+    }
 }
 
-quickStart();
+runAutoTube();
 
