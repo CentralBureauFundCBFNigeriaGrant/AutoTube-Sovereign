@@ -1,7 +1,7 @@
 name: AutoTube Engine Run
 
 on:
-  workflow_dispatch: # Allows you to trigger it manually
+  workflow_dispatch:
 
 jobs:
   build:
@@ -16,10 +16,9 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install FFmpeg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+      # FIX: Using a dedicated action instead of 'sudo apt-get'
+      - name: Setup FFmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
 
       - name: Install Dependencies
         run: npm install
