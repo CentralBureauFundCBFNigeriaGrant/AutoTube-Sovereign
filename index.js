@@ -1,56 +1,63 @@
-// --- 1. THE CRYPTO POLYFILL ---
+// --- 1. THE CRYPTO ENGINE FIX ---
 const { webcrypto } = require('node:crypto');
 if (!global.crypto) {
     global.crypto = webcrypto;
 }
 
+// --- 2. THE TTS ENGINE ---
 const { MsEdgeTTS } = require('msedge-tts');
 const fs = require('fs');
 
 /**
- * Generates audio using toStream to handle the library's latest update.
+ * Generates audio by extracting the specific audioStream from the result object.
  */
 async function generateAudio(text, outputFileName) {
     const tts = new MsEdgeTTS();
     
-    // Set voice to Guy (Male)
+    // Voice: en-US-GuyNeural is the standard reliable male voice
     await tts.setMetadata("en-US-GuyNeural", "audio-24khz-48kbitrate-mono-mp3");
 
     try {
         console.log(`Generating audio for: "${text.substring(0, 30)}..."`);
         
-        // Using toStream instead of push
-        const readable = await tts.toStream(text);
+        // FIX: toStream returns { audioStream, metadataStream }. We need the audioStream.
+        const result = await tts.toStream(text);
+        const audioStream = result.audioStream;
+
+        if (!audioStream) {
+            throw new Error("Audio stream could not be initialized.");
+        }
+
         const out = fs.createWriteStream(outputFileName);
         
         return new Promise((resolve, reject) => {
-            readable.pipe(out);
+            audioStream.pipe(out);
             
             out.on('finish', () => {
-                console.log(`✅ Success: ${outputFileName} created.`);
+                console.log(`✅ Success: ${outputFileName} generated!`);
                 resolve();
             });
             
             out.on('error', (err) => {
-                console.error("❌ Write Error:", err);
+                console.error("❌ Stream Write Error:", err);
                 reject(err);
             });
         });
     } catch (error) {
-        console.error("❌ Engine Error:", error);
+        console.error("❌ Engine Runtime Error:", error);
         throw error;
     }
 }
 
-// --- 2. MAIN EXECUTION ---
+// --- 3. MAIN EXECUTION ---
 async function runAutoTube() {
     try {
-        const script = "Final test of the engine. If this works, the audio system is fully operational.";
+        const script = "Live and direct! The engine is finally bypassing all errors. Ready for YouTube automation.";
         const output = "voiceover.mp3";
 
-        console.log("🚀 Initializing AutoTube Engine...");
+        console.log("🚀 Starting AutoTube Engine...");
         await generateAudio(script, output);
-        console.log("🎉 SUCCESS: The engine reached the finish line.");
+        console.log("🎉 MISSION COMPLETE: Check your files for voiceover.mp3");
 
     } catch (err) {
         console.error("🚨 Critical Failure:", err);
