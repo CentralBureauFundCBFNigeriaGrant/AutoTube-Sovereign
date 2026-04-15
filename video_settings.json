@@ -1,0 +1,22 @@
+{
+  "project_name": "AutoTube_V7_Alpha",
+  "niche": "Modern Luxury & Architectural Design",
+  "video_settings": {
+    "duration_seconds": 60,
+    "resolution": "1080x1920",
+    "frame_rate": 30,
+    "ai_voice": "en-US-Standard-C",
+    "tone": "Sophisticated and Inspiring"
+  },
+  "content_hooks": [
+    "Inside the most expensive modern homes",
+    "Luxury living redefined",
+    "The future of architecture"
+  ],
+  "api_preferences": {
+    "script_engine": "groq",
+    "visual_source": "pexels",
+    "background_music": "cinematic_ambient"
+  }
+}
+
