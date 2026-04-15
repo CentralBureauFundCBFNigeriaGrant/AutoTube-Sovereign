@@ -1,11 +1,18 @@
-name: AutoTube Engine Run
+name: AutoTube Periodic Run
 
 on:
-  workflow_dispatch:
+  schedule:
+    - cron: '*/30 * * * *' # Wakes up every 30 minutes
+  workflow_dispatch: # Allows you to trigger it manually for testing
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Mapping exactly to the names in your screenshot
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
 
     steps:
       - name: 1. Checkout Repository
@@ -16,28 +23,22 @@ jobs:
         with:
           node-version: '20'
 
-      - name: 3. Install FFmpeg & System Fonts
+      - name: 3. Install System Tools & Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg libass-dev fonts-dejavu
+          npm install gtts fluent-ffmpeg googleapis
 
-      - name: 4. Install Node Dependencies
-        # This is the fix! We are telling GitHub exactly which tools to install.
-        run: npm install gtts fluent-ffmpeg
-
-      - name: 5. Generate Voice & Metadata
+      # Running the engine in sequence
+      - name: 4. Generate Content (Brain)
         run: node index.js
 
-      - name: 6. Mix Audio
+      - name: 5. Mix Audio (Sound)
         run: node audio-mixer.js
 
-      - name: 7. Render Final Video
+      - name: 6. Render Video (Visuals)
         run: node video-engine.js
 
-      - name: 8. Upload Final Video ONLY
-        uses: actions/upload-artifact@v4
-        with:
-          name: Final-Output
-          path: final_video.mp4
-          if-no-files-found: error
-          
+      - name: 7. Post to YouTube (Delivery)
+        run: node youtube-uploader.js
+        
