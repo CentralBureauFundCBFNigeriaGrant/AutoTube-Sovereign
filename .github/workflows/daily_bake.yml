@@ -21,6 +21,12 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Run AutoTube Engine
+        # ... (rest of your existing code)
+        
       - name: Run AutoTube Engine
         env:
           # This connects your GitHub Secrets to the Code
