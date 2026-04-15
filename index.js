@@ -19,7 +19,7 @@ async function generateScript() {
 
     const chatCompletion = await groq.chat.completions.create({
         messages: [{ role: 'user', content: prompt }],
-        model: 'llama3-8b-8192', // Fast and efficient for scripts
+        model: 'llama-3.1-8b-instant', // Fast and efficient for scripts
     });
 
     return chatCompletion.choices[0].message.content;
