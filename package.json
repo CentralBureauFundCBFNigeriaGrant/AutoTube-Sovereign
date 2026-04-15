@@ -7,7 +7,7 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "msedge-tts": "^2.0.0"
+    "msedge-tts": "^2.0.4"
   },
   "author": "Olanrewaju Richard",
   "license": "ISC"
