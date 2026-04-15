@@ -2,7 +2,8 @@ const fs = require('fs');
 const https = require('https');
 const ffmpeg = require('fluent-ffmpeg');
 
-async function downloadImage(url, dest) {
+// Helper to download assets
+async function downloadAsset(url, dest) {
     return new Promise((resolve, reject) => {
         const file = fs.createWriteStream(dest);
         https.get(url, (res) => {
@@ -12,16 +13,34 @@ async function downloadImage(url, dest) {
     });
 }
 
+// DYNAMIC SUBTITLE GENERATOR
 function generateSRT() {
-    const srt = `1\n00:00:00,000 --> 00:00:10,000\nAutomated Content, Delivered.`;
-    fs.writeFileSync('subtitles.srt', srt);
+    if (!fs.existsSync('metadata.json')) {
+        throw new Error("Missing metadata.json! Run index.js first.");
+    }
+
+    const metadata = JSON.parse(fs.readFileSync('metadata.json', 'utf8'));
+    const scriptText = metadata.text;
+    const duration = metadata.duration;
+
+    // Formats the SRT block to match the duration of the audio
+    const srtContent = `1
+00:00:00,000 --> 00:00:${duration.toString().padStart(2, '0')},000
+${scriptText}`;
+
+    fs.writeFileSync('subtitles.srt', srtContent);
+    console.log("📝 Subtitles synced to metadata.");
 }
 
 async function runVideoEngine() {
     try {
+        // 1. Setup
         generateSRT();
-        await downloadImage("https://image.pollinations.ai/prompt/cinematic%20tech%20startup%20office%204k?width=1280&height=720&nologo=true", 'ai_visual.jpg');
+        const imageUrl = "https://image.pollinations.ai/prompt/cinematic%20high%20tech%20studio%20lighting%204k?width=1280&height=720&nologo=true";
+        await downloadAsset(imageUrl, 'ai_visual.jpg');
 
+        // 2. Render
+        console.log("🎬 Rendering Final Video...");
         return new Promise((resolve, reject) => {
             ffmpeg()
                 .input('ai_visual.jpg')
@@ -41,23 +60,23 @@ async function runVideoEngine() {
                 ])
                 .outputOptions([
                     '-c:v libx264',
-                    '-preset superfast',
-                    '-crf 20',
-                    '-c:a copy',
+                    '-preset superfast', // High speed preset
+                    '-crf 20',           // High quality constant rate factor
+                    '-c:a copy',         // Do not re-encode audio (saves time)
                     '-shortest'
                 ])
                 .on('error', (err) => reject(err))
                 .on('end', () => {
-                    console.log('🚀 Video rendering complete.');
+                    console.log('🚀 Final Output: final_video.mp4 created.');
                     resolve();
                 })
                 .save('final_video.mp4');
         });
     } catch (err) {
-        console.error("🚨 Video Error:", err);
+        console.error("🚨 Video Engine Failed:", err);
         process.exit(1);
     }
 }
 
 runVideoEngine();
-
+                    
