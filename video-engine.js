@@ -13,19 +13,15 @@ async function downloadImage(url, dest) {
 }
 
 function generateSRT() {
-    const srt = `1\n00:00:00,000 --> 00:00:10,000\nBuilding the Future of YouTube Automation.`;
+    const srt = `1\n00:00:00,000 --> 00:00:10,000\nAutomated Content, Delivered.`;
     fs.writeFileSync('subtitles.srt', srt);
-    console.log("📝 Subtitles created.");
 }
 
 async function runVideoEngine() {
     try {
         generateSRT();
-        
-        console.log("🖼️ Downloading Visual...");
         await downloadImage("https://image.pollinations.ai/prompt/cinematic%20tech%20startup%20office%204k?width=1280&height=720&nologo=true", 'ai_visual.jpg');
 
-        console.log("🎬 Starting Final Render...");
         return new Promise((resolve, reject) => {
             ffmpeg()
                 .input('ai_visual.jpg')
@@ -45,23 +41,20 @@ async function runVideoEngine() {
                 ])
                 .outputOptions([
                     '-c:v libx264',
-                    '-preset superfast', // The speed fix
-                    '-crf 20',           // High quality
-                    '-c:a copy',         // Just copy the audio (don't re-process)
+                    '-preset superfast',
+                    '-crf 20',
+                    '-c:a copy',
                     '-shortest'
                 ])
-                .on('error', (err) => {
-                    console.error('❌ Video Error:', err.message);
-                    reject(err);
-                })
+                .on('error', (err) => reject(err))
                 .on('end', () => {
-                    console.log('🚀 BOOM! Video is done: final_video.mp4');
+                    console.log('🚀 Video rendering complete.');
                     resolve();
                 })
                 .save('final_video.mp4');
         });
     } catch (err) {
-        console.error("🚨 Video Engine Failed:", err);
+        console.error("🚨 Video Error:", err);
         process.exit(1);
     }
 }
