@@ -1,7 +1,7 @@
 name: AutoTube Engine Run
 
 on:
-  workflow_dispatch: # Allows you to run it manually
+  workflow_dispatch:
 
 jobs:
   build:
@@ -16,17 +16,23 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Install Dependencies
         run: npm install
 
-      - name: Run AutoTube Engine
+      - name: Step 1: Run Audio Engine
         run: node index.js
 
-      # --- THIS IS THE NEW PART ---
-      - name: Upload Voiceover Artifact
+      - name: Step 2: Run Video Engine
+        run: node video-engine.js
+
+      - name: Upload AutoTube Results
         uses: actions/upload-artifact@v4
         with:
-          name: voiceover-file
-          path: voiceover.mp3
+          name: AutoTube-Production-Files
+          path: |
+            final_video.mp4
+            voiceover.mp3
           retention-days: 1
-          
