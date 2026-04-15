@@ -4,7 +4,7 @@
   "description": "AI Video Automation Engine",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "npm install && node index.js"
   },
   "dependencies": {
     "msedge-tts": "^2.0.4"
@@ -12,4 +12,3 @@
   "author": "Olanrewaju Richard",
   "license": "ISC"
 }
-
