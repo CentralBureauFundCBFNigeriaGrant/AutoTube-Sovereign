@@ -2,8 +2,8 @@ name: AutoTube Autonomous Engine
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # Still wakes up every 30 mins
-  workflow_dispatch: # This is what the Interface will trigger
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
     inputs:
       niche:
         description: 'The niche/topic for the video'
@@ -14,11 +14,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # These stay as repository secrets
       YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
       YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
       YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-      # This captures the input from your Dashboard
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }} # Added the Brain's API Key
       INPUT_NICHE: ${{ github.event.inputs.niche }}
 
     steps:
@@ -34,7 +33,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg libass-dev fonts-dejavu
-          npm install gtts fluent-ffmpeg googleapis
+          npm install gtts fluent-ffmpeg googleapis groq-sdk
 
       - name: 4. Run AutoTube Engine
         run: |
