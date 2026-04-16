@@ -24,7 +24,6 @@ jobs:
         uses: actions/cache@v4
         with:
           path: node_modules
-          # This line is the magic - it uses package.json to manage the cache
           key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
@@ -36,7 +35,6 @@ jobs:
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
 
       - name: Install Dependencies
-        # Only runs if the cache doesn't match your package.json
         if: steps.cache-npm.outputs.cache-hit != 'true'
         run: npm install
 
@@ -55,12 +53,13 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ./google-creds.json
         run: node video-engine.js
 
-      - name: Upload Logs
+      - name: Upload Run Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: execution-logs
+          name: AutoTube-Data
+          # Updated to find the text files we just created
           path: |
-            output.mp4
-            subs.vtt
+            script_output.txt
+            video_url.txt
             
