@@ -1,4 +1,4 @@
-name: AutoTube Sovereign v8.0
+name: AutoTube Sovereign v9.0
 
 on:
   workflow_dispatch:
@@ -15,6 +15,15 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Cache Node Modules
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install System Dependencies
         run: |
           sudo apt-get update
@@ -24,6 +33,7 @@ jobs:
         run: pip3 install edge-tts
 
       - name: Install Node Dependencies
+        if: steps.cache-npm.outputs.cache-hit != 'true'
         run: npm install axios googleapis
 
       - name: Run AutoTube Engine
@@ -41,7 +51,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: RichDaddyYo-V8-Hormozi
+          name: Viral-Guide-V9
           path: output.mp4
           retention-days: 3
           
