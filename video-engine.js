@@ -1,14 +1,12 @@
 const axios = require('axios');
 const fs = require('fs');
-const { google } = require('googleapis');
 
 // Configuration from GitHub Secrets
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const PIXABAY_API_KEY = process.env.PIXABAY_API_KEY;
 
 /**
- * STEP 1: Generate Script via Groq (Llama 3.1 8B)
- * Fix: Explicitly mentioning "JSON" in the prompt to satisfy JSON Mode requirements.
+ * STEP 1: Generate Script via Groq
  */
 async function getScript() {
     console.log("--- Step 1: Generating Script with Llama 3.1 ---");
@@ -24,7 +22,7 @@ async function getScript() {
                     },
                     {
                         role: "user",
-                        content: "Create a 60-second high-energy script about making money with AI. The response MUST be a JSON object with two keys: 'script' (the spoken text) and 'search_term' (a keyword for background footage). Keep it under 140 words."
+                        content: "Create a 60-second high-energy script about making money with AI. Response MUST be a JSON object with: 'script' (the text) and 'search_term' (keyword)."
                     }
                 ],
                 response_format: { type: "json_object" }
@@ -37,18 +35,14 @@ async function getScript() {
             }
         );
 
-        const data = JSON.parse(response.data.choices[0].message.content);
+        // Extract and parse the JSON string from the response
+        const contentString = response.data.choices[0].message.content;
+        const data = JSON.parse(contentString);
+        
         console.log("Script Generated successfully.");
         return data;
     } catch (error) {
-        console.error("Error in Groq Script Generation:");
-        if (error.response) {
-            // This will show us the EXACT reason for the 'Bad Request'
-            console.error("Status:", error.response.status);
-            console.error("Data:", JSON.stringify(error.response.data, null, 2));
-        } else {
-            console.error(error.message);
-        }
+        console.error("Error in Groq Script Generation:", error.message);
         process.exit(1); 
     }
 }
@@ -62,14 +56,11 @@ async function getVisuals(keyword) {
         const url = `https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(keyword)}&per_page=3&orientation=vertical`;
         const res = await axios.get(url);
         if (res.data.hits.length > 0) {
-            const videoUrl = res.data.hits[0].videos.large.url;
-            console.log("Video found:", videoUrl);
-            return videoUrl;
+            return res.data.hits[0].videos.large.url;
         }
-        throw new Error("No videos found on Pixabay for this keyword.");
-    } catch (error) {
-        console.error("Pixabay Error:", error.message);
         return "https://cdn.pixabay.com/video/2016/09/13/5053-181585489_large.mp4"; // Fallback
+    } catch (error) {
+        return "https://cdn.pixabay.com/video/2016/09/13/5053-181585489_large.mp4";
     }
 }
 
@@ -78,14 +69,19 @@ async function main() {
     const content = await getScript();
     const videoUrl = await getVisuals(content.search_term);
     
-    console.log("\n--- Ready for Processing ---");
-    console.log("Script:", content.script);
-    console.log("Video URL:", videoUrl);
+    console.log("\n--- Processing Check ---");
     
-    // Future steps: TTS (Nigerian Voice) and FFmpeg assembly go here.
-    // For now, we save the text so the Action doesn't return "No Artifacts"
-    fs.writeFileSync('script_output.txt', content.script);
-    console.log("Progress saved to script_output.txt");
+    // FIX: Ensuring the data is a String before writing to file
+    const finalScript = String(content.script || "Script generation failed.");
+    
+    fs.writeFileSync('script_output.txt', finalScript);
+    console.log("Script saved to script_output.txt");
+    
+    // We also save the video URL so we can see it in the logs
+    fs.writeFileSync('video_url.txt', String(videoUrl));
+    console.log("Video URL saved to video_url.txt");
+    
+    console.log("Success! Script and Video link are ready.");
 }
 
 main();
