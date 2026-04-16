@@ -6,9 +6,10 @@ const { google } = require('googleapis');
 // Configuration
 const GROQ_KEYS = [process.env.GROQ_API_KEY, process.env.GROQ_API_KEY_2].filter(k => k);
 const PIXABAY_API_KEY = process.env.PIXABAY_API_KEY;
+const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
 
 /**
- * UTILITY: JSON Extraction (Clean and precise)
+ * UTILITY: JSON Extraction
  */
 function robustJSONParse(text) {
     try {
@@ -21,7 +22,7 @@ function robustJSONParse(text) {
 }
 
 /**
- * STEP 1: THE BRAIN (Multi-Scene Logic)
+ * STEP 1: THE BRAIN (Now strictly filtering meta-talk)
  */
 async function getContent() {
     console.log("🧠 Step 1: Generating Scene-by-Scene Script...");
@@ -32,13 +33,13 @@ async function getContent() {
                 messages: [
                     { 
                         role: "system", 
-                        content: "You are a viral YouTube creator. Output ONLY JSON. No stage directions like 'Scene 1' or 'Intro'. No quotes. Just the spoken words." 
+                        content: "You are a viral YouTube creator. Output ONLY JSON. DO NOT include stage directions, speaker names, or transition notes. The 'text' field must contain ONLY what the person says." 
                     },
                     { 
                         role: "user", 
-                        content: `Create a 58-second high-energy script about 'The Secret to AI Wealth'. 
+                        content: `Create a 58-second high-energy script about 'Financial Freedom with AI'. 
                         Break it into 10 scenes. 
-                        Format: {"scenes": [{"text": "Imagine making money while you sleep.", "keyword": "luxury bedroom"}, {"text": "AI does the work for you.", "keyword": "robot technology"}]}` 
+                        Format: {"scenes": [{"text": "You are losing money every second you aren't using AI.", "keyword": "digital money pulse"}]}` 
                     }
                 ],
                 response_format: { type: "json_object" }
@@ -46,30 +47,51 @@ async function getContent() {
 
             const data = robustJSONParse(response.data.choices[0].message.content);
             if (data && data.scenes) return data.scenes;
-        } catch (e) { console.warn(`⚠️ Key ${i+1} failed.`); }
+        } catch (e) { console.warn(`⚠️ Groq Key ${i+1} failed.`); }
     }
     throw new Error("All Groq keys failed.");
 }
 
 /**
- * STEP 2: THE VOICE & THE EYES (Multi-Clip Fetching)
+ * STEP 2 & 3: VOICE & DUAL-API VISUALS
  */
 async function processMedia(scenes) {
-    console.log("🎙️ Step 2: Generating Voiceover...");
+    console.log("🎙️ Step 2: Generating Natural Voiceover...");
     const fullScript = scenes.map(s => s.text).join(' ');
-    const voiceCmd = `edge-tts --voice en-NG-AbeoNeural --text "${fullScript.replace(/"/g, '')}" --write-media voice.mp3 --rate=+20%`;
+    // RATE FIXED TO +0% FOR NATURAL SPEECH
+    const voiceCmd = `edge-tts --voice en-NG-AbeoNeural --text "${fullScript.replace(/"/g, '')}" --write-media voice.mp3 --rate=+0%`;
     execSync(voiceCmd);
 
     const videoFiles = [];
     for (let i = 0; i < scenes.length; i++) {
         const filename = `clip_${i}.mp4`;
-        console.log(`🎬 Fetching Clip ${i+1}/${scenes.length} for: ${scenes[i].keyword}`);
+        const keyword = scenes[i].keyword;
+        console.log(`🎬 Fetching Clip ${i+1} for: ${keyword}`);
         
-        let videoUrl = "https://cdn.pixabay.com/video/2016/09/13/5053-181585489_large.mp4";
+        let videoUrl = null;
+
+        // Try Pixabay First
         try {
-            const res = await axios.get(`https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(scenes[i].keyword)}&orientation=vertical`);
-            if (res.data.hits?.length > 0) videoUrl = res.data.hits[0].videos.large.url;
-        } catch (e) { console.warn("Fallback clip used."); }
+            const pxa = await axios.get(`https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(keyword)}&orientation=vertical&per_page=3`);
+            if (pxa.data.hits?.length > 0) videoUrl = pxa.data.hits[0].videos.large.url;
+        } catch (e) { console.warn("  - Pixabay skipped."); }
+
+        // Try Pexels Backup
+        if (!videoUrl && PEXELS_API_KEY) {
+            try {
+                console.log("  - Falling back to Pexels...");
+                const pex = await axios.get(`https://api.pexels.com/videos/search?query=${encodeURIComponent(keyword)}&orientation=portrait&per_page=1`, {
+                    headers: { 'Authorization': PEXELS_API_KEY }
+                });
+                if (pex.data.videos?.length > 0) videoUrl = pex.data.videos[0].video_files.find(f => f.quality === 'hd' || f.quality === 'sd').link;
+            } catch (e) { console.warn("  - Pexels skipped."); }
+        }
+
+        // Final Safety Fallback
+        if (!videoUrl) {
+            console.log("  - Using Emergency Safety Clip.");
+            videoUrl = "https://cdn.pixabay.com/video/2016/09/13/5053-181585489_large.mp4"; 
+        }
 
         const writer = fs.createWriteStream(filename);
         const stream = await axios({ url: videoUrl, method: 'GET', responseType: 'stream' });
@@ -81,31 +103,32 @@ async function processMedia(scenes) {
 }
 
 /**
- * STEP 4: THE EDITOR (The Hormozi "Pop" Filter)
+ * STEP 4: THE EDITOR (Hormozi Masterpiece)
  */
 async function assembleVideo(scenes, videoFiles) {
-    console.log("✂️ Step 4: Mastering Video with Hormozi Subtitles...");
+    console.log("✂️ Step 4: Final Assembly with Thick Subtitles...");
     
     const listContent = videoFiles.map(f => `file '${f}'`).join('\n');
     fs.writeFileSync('inputs.txt', listContent);
 
     let filterString = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920";
     let currentTime = 0;
-    const wordsPerSecond = 3.0; // Dynamic pacing
+    const wordsPerSecond = 2.4; // Slightly slower for natural feel
 
     scenes.forEach((scene) => {
         const duration = scene.text.split(' ').length / wordsPerSecond;
         const endTime = currentTime + duration;
-        const cleanText = scene.text.toUpperCase().replace(/'/g, "");
+        // Forces Uppercase and removes special characters for clean subtitles
+        const cleanText = scene.text.toUpperCase().replace(/[^\w\s]/gi, '');
         
-        // BOLD YELLOW TEXT + THICK BLACK BORDER
-        filterString += `,drawtext=text='${cleanText}':fontcolor=yellow:fontsize=85:x=(w-text_w)/2:y=(h-text_h)/2:borderw=8:bordercolor=black:enable='between(t,${currentTime},${endTime})'`;
+        // HORMOZI STYLE: Yellow, Bold, Thick 10px Border
+        filterString += `,drawtext=text='${cleanText}':fontcolor=yellow:fontsize=80:x=(w-text_w)/2:y=(h-text_h)/2:borderw=10:bordercolor=black:enable='between(t,${currentTime},${endTime})'`;
         
         currentTime = endTime;
     });
 
-    // Branding Watermark
-    filterString += `,drawtext=text='@RICHDADDYYO':fontcolor=white@0.3:fontsize=40:x=(w-text_w)/2:y=h-150`;
+    // Sub-Watermark
+    filterString += `,drawtext=text='@RICHDADDYYO':fontcolor=white@0.4:fontsize=35:x=(w-text_w)/2:y=h-200`;
 
     const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt -i voice.mp3 \
         -vf "${filterString}" -c:v libx264 -preset ultrafast -c:a aac -shortest output.mp4`;
@@ -117,7 +140,7 @@ async function assembleVideo(scenes, videoFiles) {
  * STEP 5: THE DELIVERY
  */
 async function uploadToYouTube(fullScript) {
-    console.log("🚀 Step 5: Uploading to @RichDaddyYo...");
+    console.log("🚀 Step 5: Uploading...");
     const oauth2Client = new google.auth.OAuth2(process.env.YT_CLIENT_ID, process.env.YT_CLIENT_SECRET);
     oauth2Client.setCredentials({ refresh_token: process.env.YT_REFRESH_TOKEN });
     const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
@@ -125,7 +148,7 @@ async function uploadToYouTube(fullScript) {
     await youtube.videos.insert({
         part: 'snippet,status',
         requestBody: {
-            snippet: { title: 'AI Wealth Secret #Shorts', description: fullScript, categoryId: '27' },
+            snippet: { title: 'The AI Money Secret #Shorts', description: fullScript, categoryId: '27' },
             status: { privacyStatus: 'public', selfDeclaredMadeForKids: false }
         },
         media: { body: fs.createReadStream('output.mp4') }
@@ -138,9 +161,9 @@ async function main() {
         const videoFiles = await processMedia(scenes);
         await assembleVideo(scenes, videoFiles);
         await uploadToYouTube(scenes.map(s => s.text).join(' '));
-        console.log("🏆 MISSION COMPLETE: Video is LIVE!");
+        console.log("🏆 V7 MISSION SUCCESSFUL!");
     } catch (e) {
-        console.error("🔥 FATAL ERROR:", e.message);
+        console.error("🔥 ERROR:", e.message);
         process.exit(1);
     }
 }
