@@ -2,12 +2,14 @@ name: AutoTube Master Engine
 
 on:
   schedule:
+    # 7 AM, 9 AM, 1 PM, 3 PM, 7 PM, 9 PM (WAT)
     - cron: '0 6,8,12,14,18,20 * * *'
   workflow_dispatch: 
 
 jobs:
   build-and-post:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -16,21 +18,38 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          # CRITICAL: We leave 'cache' out here to prevent the lock file error
 
-      - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Custom Dependency Cache
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          # We use package.json as the key instead of a lock file
+          key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install FFmpeg & Fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg ttf-mscorefonts-installer
+          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
 
       - name: Install Dependencies
+        # Only runs if the cache doesn't exist yet
+        if: steps.cache-npm.outputs.cache-hit != 'true'
         run: npm install
 
-      - name: Setup Google Cloud
-        run: echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}" > google-creds.json
+      - name: Setup Google Cloud Credentials
+        run: |
+          echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}" > google-creds.json
 
-      - name: Run AutoTube
+      - name: Run AutoTube Engine
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
