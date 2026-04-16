@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -14,12 +14,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm' # This is the "Magic" switch for caching
+          cache: 'npm'
 
       - name: Install System Engine
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-freefont-ttf
+          # Added libass-dev to handle the new .vtt subtitle rendering
+          sudo apt-get install -y ffmpeg fonts-freefont-ttf libass-dev
           pip3 install edge-tts
 
       - name: Install Dependencies
