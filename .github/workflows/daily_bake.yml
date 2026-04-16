@@ -1,4 +1,4 @@
-name: AutoTube Sovereign v7.0
+name: AutoTube Sovereign v8.0
 
 on:
   workflow_dispatch:
@@ -18,7 +18,7 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg python3-pip
+          sudo apt-get install -y ffmpeg python3-pip fonts-freefont-ttf
 
       - name: Install Edge TTS
         run: pip3 install edge-tts
@@ -41,7 +41,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: RichDaddyYo-V7-Final
+          name: RichDaddyYo-V8-Hormozi
           path: output.mp4
           retention-days: 3
           
