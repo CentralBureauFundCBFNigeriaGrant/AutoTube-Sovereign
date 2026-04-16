@@ -8,7 +8,7 @@ const GROQ_KEYS = [process.env.GROQ_API_KEY, process.env.GROQ_API_KEY_2].filter(
 const PIXABAY_API_KEY = process.env.PIXABAY_API_KEY;
 
 /**
- * UTILITY: JSON Extraction
+ * UTILITY: JSON Extraction (Clean and precise)
  */
 function robustJSONParse(text) {
     try {
@@ -21,88 +21,103 @@ function robustJSONParse(text) {
 }
 
 /**
- * STEP 1: THE BRAIN (Groq Llama 3.1)
+ * STEP 1: THE BRAIN (Multi-Scene Logic)
  */
-async function getScript() {
-    console.log("🧠 Step 1: Brainstorming Viral Script...");
+async function getContent() {
+    console.log("🧠 Step 1: Generating Scene-by-Scene Script...");
     for (let i = 0; i < GROQ_KEYS.length; i++) {
         try {
-            console.log(`📡 Trying Groq Key ${i + 1}...`);
             const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
                 model: "llama-3.1-8b-instant",
                 messages: [
-                    { role: "system", content: "You are a viral YouTube creator. Output ONLY raw JSON." },
-                    { role: "user", content: "Create a 58-second high-energy script about 'The AI Money Secret'. Format: {\"script\": \"...\", \"search_term\": \"wealth\"}" }
+                    { 
+                        role: "system", 
+                        content: "You are a viral YouTube creator. Output ONLY JSON. No stage directions like 'Scene 1' or 'Intro'. No quotes. Just the spoken words." 
+                    },
+                    { 
+                        role: "user", 
+                        content: `Create a 58-second high-energy script about 'The Secret to AI Wealth'. 
+                        Break it into 10 scenes. 
+                        Format: {"scenes": [{"text": "Imagine making money while you sleep.", "keyword": "luxury bedroom"}, {"text": "AI does the work for you.", "keyword": "robot technology"}]}` 
+                    }
                 ],
                 response_format: { type: "json_object" }
-            }, { 
-                headers: { 'Authorization': `Bearer ${GROQ_KEYS[i]}` },
-                timeout: 50000 
-            });
+            }, { headers: { 'Authorization': `Bearer ${GROQ_KEYS[i]}` }, timeout: 50000 });
 
             const data = robustJSONParse(response.data.choices[0].message.content);
-            if (data && data.script) return data;
-        } catch (e) { console.warn(`⚠️ Key ${i+1} failed or limit reached.`); }
+            if (data && data.scenes) return data.scenes;
+        } catch (e) { console.warn(`⚠️ Key ${i+1} failed.`); }
     }
     throw new Error("All Groq keys failed.");
 }
 
 /**
- * STEP 2: THE VOICE (Edge TTS - String Safety Fix)
+ * STEP 2: THE VOICE & THE EYES (Multi-Clip Fetching)
  */
-async function generateAudio(text) {
-    console.log("🎙️ Step 2: Generating Nigerian AI Voice (Abeo)...");
-    try {
-        // FIX: Force 'text' to be a String to prevent .replace errors
-        const textStr = String(text || "");
-        const cleanText = textStr.replace(/"/g, '').replace(/\n/g, ' ');
+async function processMedia(scenes) {
+    console.log("🎙️ Step 2: Generating Voiceover...");
+    const fullScript = scenes.map(s => s.text).join(' ');
+    const voiceCmd = `edge-tts --voice en-NG-AbeoNeural --text "${fullScript.replace(/"/g, '')}" --write-media voice.mp3 --rate=+20%`;
+    execSync(voiceCmd);
+
+    const videoFiles = [];
+    for (let i = 0; i < scenes.length; i++) {
+        const filename = `clip_${i}.mp4`;
+        console.log(`🎬 Fetching Clip ${i+1}/${scenes.length} for: ${scenes[i].keyword}`);
         
-        if (!cleanText || cleanText === "undefined") {
-            throw new Error("Script text was empty or undefined.");
-        }
+        let videoUrl = "https://cdn.pixabay.com/video/2016/09/13/5053-181585489_large.mp4";
+        try {
+            const res = await axios.get(`https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(scenes[i].keyword)}&orientation=vertical`);
+            if (res.data.hits?.length > 0) videoUrl = res.data.hits[0].videos.large.url;
+        } catch (e) { console.warn("Fallback clip used."); }
 
-        const cmd = `edge-tts --voice en-NG-AbeoNeural --text "${cleanText}" --write-media voice.mp3 --rate=+15%`;
-        execSync(cmd);
-        console.log("✅ Voiceover generated: voice.mp3");
-    } catch (e) {
-        console.error("❌ Edge TTS Failed:", e.message);
-        throw e;
+        const writer = fs.createWriteStream(filename);
+        const stream = await axios({ url: videoUrl, method: 'GET', responseType: 'stream' });
+        stream.data.pipe(writer);
+        await new Promise(r => writer.on('finish', r));
+        videoFiles.push(filename);
     }
+    return videoFiles;
 }
 
 /**
- * STEP 3: THE EYES (Pixabay)
+ * STEP 4: THE EDITOR (The Hormozi "Pop" Filter)
  */
-async function getVisuals(keyword) {
-    console.log(`🎬 Step 3: Fetching footage for: ${keyword}...`);
-    let videoUrl = "https://cdn.pixabay.com/video/2016/09/13/5053-181585489_large.mp4";
-    try {
-        const res = await axios.get(`https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(keyword)}&orientation=vertical`);
-        if (res.data.hits?.length > 0) videoUrl = res.data.hits[0].videos.large.url;
-    } catch (e) { console.warn("⚠️ Using fallback video."); }
+async function assembleVideo(scenes, videoFiles) {
+    console.log("✂️ Step 4: Mastering Video with Hormozi Subtitles...");
+    
+    const listContent = videoFiles.map(f => `file '${f}'`).join('\n');
+    fs.writeFileSync('inputs.txt', listContent);
 
-    const writer = fs.createWriteStream('background.mp4');
-    const response = await axios({ url: videoUrl, method: 'GET', responseType: 'stream' });
-    response.data.pipe(writer);
-    return new Promise((resolve) => writer.on('finish', resolve));
-}
+    let filterString = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920";
+    let currentTime = 0;
+    const wordsPerSecond = 3.0; // Dynamic pacing
 
-/**
- * STEP 4: THE EDITOR (FFmpeg - Hormozi Styling)
- */
-async function assembleVideo() {
-    console.log("✂️ Step 4: Final Assembly (1080x1920 Vertical)...");
-    const cmd = `ffmpeg -y -stream_loop -1 -i background.mp4 -i voice.mp3 \
-        -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,drawtext=text='RICH DADDY YO':fontcolor=yellow:fontsize=80:x=(w-text_w)/2:y=(h-text_h)/2+300:borderw=4:bordercolor=black" \
-        -c:v libx264 -preset ultrafast -c:a aac -shortest output.mp4`;
+    scenes.forEach((scene) => {
+        const duration = scene.text.split(' ').length / wordsPerSecond;
+        const endTime = currentTime + duration;
+        const cleanText = scene.text.toUpperCase().replace(/'/g, "");
+        
+        // BOLD YELLOW TEXT + THICK BLACK BORDER
+        filterString += `,drawtext=text='${cleanText}':fontcolor=yellow:fontsize=85:x=(w-text_w)/2:y=(h-text_h)/2:borderw=8:bordercolor=black:enable='between(t,${currentTime},${endTime})'`;
+        
+        currentTime = endTime;
+    });
+
+    // Branding Watermark
+    filterString += `,drawtext=text='@RICHDADDYYO':fontcolor=white@0.3:fontsize=40:x=(w-text_w)/2:y=h-150`;
+
+    const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt -i voice.mp3 \
+        -vf "${filterString}" -c:v libx264 -preset ultrafast -c:a aac -shortest output.mp4`;
+    
     execSync(cmd, { stdio: 'inherit' });
 }
 
 /**
- * STEP 5: THE DELIVERY (YouTube @RichDaddyYo)
+ * STEP 5: THE DELIVERY
  */
-async function uploadToYouTube(script) {
-    console.log("🚀 Step 5: Uploading to YouTube...");
+async function uploadToYouTube(fullScript) {
+    console.log("🚀 Step 5: Uploading to @RichDaddyYo...");
     const oauth2Client = new google.auth.OAuth2(process.env.YT_CLIENT_ID, process.env.YT_CLIENT_SECRET);
     oauth2Client.setCredentials({ refresh_token: process.env.YT_REFRESH_TOKEN });
     const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
@@ -110,7 +125,7 @@ async function uploadToYouTube(script) {
     await youtube.videos.insert({
         part: 'snippet,status',
         requestBody: {
-            snippet: { title: 'AI Wealth Secret #Shorts', description: String(script), categoryId: '27' },
+            snippet: { title: 'AI Wealth Secret #Shorts', description: fullScript, categoryId: '27' },
             status: { privacyStatus: 'public', selfDeclaredMadeForKids: false }
         },
         media: { body: fs.createReadStream('output.mp4') }
@@ -119,17 +134,15 @@ async function uploadToYouTube(script) {
 
 async function main() {
     try {
-        const content = await getScript();
-        await generateAudio(content.script);
-        await getVisuals(content.search_term);
-        await assembleVideo();
-        await uploadToYouTube(content.script);
-        console.log("🏆 SUCCESS: Video is LIVE on @RichDaddyYo!");
+        const scenes = await getContent();
+        const videoFiles = await processMedia(scenes);
+        await assembleVideo(scenes, videoFiles);
+        await uploadToYouTube(scenes.map(s => s.text).join(' '));
+        console.log("🏆 MISSION COMPLETE: Video is LIVE!");
     } catch (e) {
-        console.error("🔥 ERROR:", e.message);
+        console.error("🔥 FATAL ERROR:", e.message);
         process.exit(1);
     }
 }
 
 main();
-                        
