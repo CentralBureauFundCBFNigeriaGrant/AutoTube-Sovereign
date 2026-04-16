@@ -21,7 +21,7 @@ function robustJSONParse(text) {
 }
 
 /**
- * STEP 1: THE BRAIN (Groq)
+ * STEP 1: THE BRAIN (Groq Llama 3.1)
  */
 async function getScript() {
     console.log("🧠 Step 1: Brainstorming Viral Script...");
@@ -32,7 +32,7 @@ async function getScript() {
                 model: "llama-3.1-8b-instant",
                 messages: [
                     { role: "system", content: "You are a viral YouTube creator. Output ONLY raw JSON." },
-                    { role: "user", content: "Create a 58-second high-energy script about 'The AI Money Secret'. Format: {\"script\": \"...\", \"search_term\": \"finance\"}" }
+                    { role: "user", content: "Create a 58-second high-energy script about 'The AI Money Secret'. Format: {\"script\": \"...\", \"search_term\": \"wealth\"}" }
                 ],
                 response_format: { type: "json_object" }
             }, { 
@@ -42,21 +42,26 @@ async function getScript() {
 
             const data = robustJSONParse(response.data.choices[0].message.content);
             if (data && data.script) return data;
-        } catch (e) { console.warn(`⚠️ Key ${i+1} skipped.`); }
+        } catch (e) { console.warn(`⚠️ Key ${i+1} failed or limit reached.`); }
     }
-    throw new Error("All Brain keys failed.");
+    throw new Error("All Groq keys failed.");
 }
 
 /**
- * STEP 2: THE VOICE (Edge TTS - FREE & HIGH QUALITY)
- * Voice Used: en-NG-AbeoNeural (Nigerian Male)
+ * STEP 2: THE VOICE (Edge TTS - String Safety Fix)
  */
 async function generateAudio(text) {
-    console.log("🎙️ Step 2: Generating Edge AI Voice (Abeo - Nigeria)...");
+    console.log("🎙️ Step 2: Generating Nigerian AI Voice (Abeo)...");
     try {
-        // We use the Python CLI tool we installed in the workflow
-        // --rate=+15% makes the voice faster and more 'Hormozi' style
-        const cmd = `edge-tts --voice en-NG-AbeoNeural --text "${text.replace(/"/g, '')}" --write-media voice.mp3 --rate=+15%`;
+        // FIX: Force 'text' to be a String to prevent .replace errors
+        const textStr = String(text || "");
+        const cleanText = textStr.replace(/"/g, '').replace(/\n/g, ' ');
+        
+        if (!cleanText || cleanText === "undefined") {
+            throw new Error("Script text was empty or undefined.");
+        }
+
+        const cmd = `edge-tts --voice en-NG-AbeoNeural --text "${cleanText}" --write-media voice.mp3 --rate=+15%`;
         execSync(cmd);
         console.log("✅ Voiceover generated: voice.mp3");
     } catch (e) {
@@ -69,7 +74,7 @@ async function generateAudio(text) {
  * STEP 3: THE EYES (Pixabay)
  */
 async function getVisuals(keyword) {
-    console.log(`🎬 Step 3: Finding footage for: ${keyword}...`);
+    console.log(`🎬 Step 3: Fetching footage for: ${keyword}...`);
     let videoUrl = "https://cdn.pixabay.com/video/2016/09/13/5053-181585489_large.mp4";
     try {
         const res = await axios.get(`https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(keyword)}&orientation=vertical`);
@@ -83,7 +88,7 @@ async function getVisuals(keyword) {
 }
 
 /**
- * STEP 4: THE EDITOR (FFmpeg - Final Polish)
+ * STEP 4: THE EDITOR (FFmpeg - Hormozi Styling)
  */
 async function assembleVideo() {
     console.log("✂️ Step 4: Final Assembly (1080x1920 Vertical)...");
@@ -105,7 +110,7 @@ async function uploadToYouTube(script) {
     await youtube.videos.insert({
         part: 'snippet,status',
         requestBody: {
-            snippet: { title: 'AI Wealth Secret #Shorts', description: script, categoryId: '27' },
+            snippet: { title: 'AI Wealth Secret #Shorts', description: String(script), categoryId: '27' },
             status: { privacyStatus: 'public', selfDeclaredMadeForKids: false }
         },
         media: { body: fs.createReadStream('output.mp4') }
@@ -127,3 +132,4 @@ async function main() {
 }
 
 main();
+                        
