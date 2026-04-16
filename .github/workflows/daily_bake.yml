@@ -2,8 +2,10 @@ name: AutoTube Autonomous Engine
 
 on:
   schedule:
-    - cron: '0 9,21 * * *' # Runs twice a day (9 AM and 9 PM)
-  workflow_dispatch: # Allows you to run it manually for testing
+    # 7 AM, 9 AM, 1 PM, 3 PM, 7 PM, 9 PM (WAT / UTC+1)
+    # Cron uses UTC, so we subtract 1 hour from each:
+    - cron: '0 6,8,12,14,18,20 * * *'
+  workflow_dispatch: 
 
 jobs:
   build-and-post:
@@ -23,7 +25,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg ttf-mscorefonts-installer
-          # Accept the license for Microsoft fonts (Impact)
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
 
       - name: Install Dependencies
@@ -32,7 +33,6 @@ jobs:
       - name: Setup Google Cloud Credentials
         run: |
           echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}" > google-creds.json
-        # Note: Make sure your secret name matches this exactly
 
       - name: Run AutoTube Engine
         env:
@@ -45,7 +45,7 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ./google-creds.json
         run: node video-engine.js
 
-      - name: Upload Logs (Optional)
+      - name: Upload Logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
