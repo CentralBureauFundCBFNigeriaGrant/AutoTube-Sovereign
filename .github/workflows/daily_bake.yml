@@ -10,18 +10,20 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js (with Cache)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install System Engine
+      - name: Install System Engine & Anton Font
         run: |
           sudo apt-get update
-          # Including libass-dev is CRITICAL for the .vtt subtitle rendering
-          sudo apt-get install -y ffmpeg fonts-freefont-ttf libass-dev
+          sudo apt-get install -y ffmpeg libass-dev
           pip3 install edge-tts
+          # Download Anton Font for that Hormozi Look
+          mkdir -p fonts
+          wget -O fonts/Anton.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf
 
       - name: Install Dependencies
         run: npm install axios googleapis
@@ -35,3 +37,4 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         run: node video-engine.js
+        
