@@ -1,15 +1,20 @@
 {
   "name": "autotube-engine",
-  "version": "1.1.0",
-  "description": "AI Video Automation Engine",
-  "main": "index.js",
-  "scripts": {
-    "start": "npm install && node index.js && node video-engine.js"
-  },
+  "version": "1.2.0",
+  "description": "Autonomous YouTube Shorts Engine for @RichDaddyYo",
+  "main": "video-engine.js",
   "dependencies": {
-    "msedge-tts": "^2.0.4",
-    "fluent-ffmpeg": "^2.1.3"
+    "axios": "^1.6.2",
+    "openai": "^4.20.1",
+    "@google-cloud/text-to-speech": "^5.0.1",
+    "googleapis": "^128.0.0",
+    "fluent-ffmpeg": "^2.1.2"
   },
-  "author": "Olanrewaju Richard",
-  "license": "ISC"
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node video-engine.js"
+  }
 }
+
