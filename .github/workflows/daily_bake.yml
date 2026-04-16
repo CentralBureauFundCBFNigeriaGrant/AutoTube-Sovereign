@@ -2,8 +2,7 @@ name: AutoTube Autonomous Engine
 
 on:
   schedule:
-    # 7 AM, 9 AM, 1 PM, 3 PM, 7 PM, 9 PM (WAT / UTC+1)
-    # Cron uses UTC, so we subtract 1 hour from each:
+    # 7 AM, 9 AM, 1 PM, 3 PM, 7 PM, 9 PM (WAT)
     - cron: '0 6,8,12,14,18,20 * * *'
   workflow_dispatch: 
 
@@ -19,7 +18,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+
+      - name: Cache Node Modules
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          # This line is the magic - it uses package.json to manage the cache
+          key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
       - name: Install FFmpeg & Fonts
         run: |
@@ -28,7 +36,9 @@ jobs:
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
 
       - name: Install Dependencies
-        run: npm install axios openai @google-cloud/text-to-speech googleapis
+        # Only runs if the cache doesn't match your package.json
+        if: steps.cache-npm.outputs.cache-hit != 'true'
+        run: npm install
 
       - name: Setup Google Cloud Credentials
         run: |
