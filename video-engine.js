@@ -10,14 +10,10 @@ const GROQ_KEYS = [process.env.GROQ_API_KEY].filter(k => k);
 const PIXABAY_API_KEY = process.env.PIXABAY_API_KEY;
 const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
 
-// YouTube Credentials
 const YT_CLIENT_ID = process.env.YT_CLIENT_ID;
 const YT_CLIENT_SECRET = process.env.YT_CLIENT_SECRET;
 const YT_REFRESH_TOKEN = process.env.YT_REFRESH_TOKEN;
 
-/**
- * HELPER: Robust JSON Parsing
- */
 function robustJSONParse(text) {
     try {
         const start = text.indexOf('{');
@@ -28,7 +24,7 @@ function robustJSONParse(text) {
 }
 
 /**
- * STEP 1: THE BRAIN (Script Generation via Groq)
+ * STEP 1: THE BRAIN (Now with Viral Hook & CTA)
  */
 async function getContent() {
     console.log("🧠 Step 1: Generating Viral Script...");
@@ -41,7 +37,12 @@ async function getContent() {
                 messages: [
                     { 
                         role: "system", 
-                        content: "You are a YouTube Growth Expert. Output ONLY JSON. Break script into 12-15 short scenes (3-6 words each). Style: Aggressive, high-energy. Return format: {\"scenes\": [{\"text\": \"SCENE TEXT\", \"keyword\": \"search_term\"}]}" 
+                        content: `You are a viral YouTube Shorts expert. Output ONLY JSON.
+                        RULES:
+                        1. HOOK: The first scene must be a high-energy "scroll-stopper."
+                        2. CTA: The last scene MUST say "Subscribe for more viral secrets!"
+                        3. FORMAT: Break script into 15-20 very short scenes (2-4 words each).
+                        Return format: {"scenes": [{"text": "SCENE TEXT", "keyword": "search_term"}]}` 
                     },
                     { role: "user", content: `Topic: ${topic}` }
                 ],
@@ -56,31 +57,29 @@ async function getContent() {
 }
 
 /**
- * STEP 2 & 3: VOICE & CONCURRENT MEDIA DOWNLOADS
+ * STEP 2 & 3: VOICE & MEDIA
  */
 async function processMedia(scenes) {
     console.log("🎙️ Step 2: Generating Nigerian Voiceover...");
     const fullScript = scenes.map(s => s.text).join(' ');
-    // We use Abeo (Nigerian Male) and a slightly faster rate for engagement
-    execSync(`edge-tts --voice en-NG-AbeoNeural --text "${fullScript.replace(/"/g, '')}" --write-media voice.mp3 --rate=+5%`);
+    // Added --rate=+10% for more energy and fixed quote escaping
+    const safeScript = fullScript.replace(/["']/g, "");
+    execSync(`edge-tts --voice en-NG-AbeoNeural --text "${safeScript}" --write-media voice.mp3 --rate=+10%`);
 
-    console.log("🎬 Step 3: Fetching Clips in Parallel...");
+    console.log("🎬 Step 3: Fetching Clips...");
     const downloadClip = async (scene, i) => {
-        let videoUrl = "https://cdn.pixabay.com/video/2016/09/13/5053-181585489_large.mp4"; // Default Safety
-        
+        let videoUrl = "https://cdn.pixabay.com/video/2016/09/13/5053-181585489_large.mp4"; 
         try {
-            // Try Pixabay First
             const pxa = await axios.get(`https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(scene.keyword)}&orientation=vertical&per_page=3`, { timeout: 10000 });
             if (pxa.data.hits?.length > 0) {
                 videoUrl = pxa.data.hits[0].videos.medium.url;
             } else if (PEXELS_API_KEY) {
-                // Fallback to Pexels
                 const pex = await axios.get(`https://api.pexels.com/videos/search?query=${encodeURIComponent(scene.keyword)}&orientation=portrait&per_page=1`, {
                     headers: { 'Authorization': PEXELS_API_KEY }, timeout: 10000
                 });
                 if (pex.data.videos?.length > 0) videoUrl = pex.data.videos[0].video_files[0].link;
             }
-        } catch (e) { console.log(`⚠️ Clip ${i} fetch error, using backup.`); }
+        } catch (e) { console.log(`⚠️ Clip ${i} fetch error.`); }
 
         const path = `clip_${i}.mp4`;
         const writer = fs.createWriteStream(path);
@@ -94,10 +93,10 @@ async function processMedia(scenes) {
 }
 
 /**
- * STEP 4: TURBO ASSEMBLY (FFmpeg)
+ * STEP 4: TURBO ASSEMBLY (Word-for-Word Subtitles Fix)
  */
 async function assembleVideo(scenes, videoFiles) {
-    console.log("✂️ Step 4: Rapid Rendering...");
+    console.log("✂️ Step 4: Rapid Rendering with Pop Subtitles...");
     
     const listContent = videoFiles.map(f => `file '${f}'`).join('\n');
     fs.writeFileSync('inputs.txt', listContent);
@@ -106,35 +105,39 @@ async function assembleVideo(scenes, videoFiles) {
     let filterString = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
     
     let currentTime = 0;
-    const wordsPerSec = 2.4; // Average speed of Nigerian voice at +5%
+    const wordsPerSec = 2.6; // Adjusted for +10% speed
 
     scenes.forEach((scene) => {
-        const duration = scene.text.split(' ').length / wordsPerSec;
-        const endTime = currentTime + duration;
-        const cleanText = scene.text.toUpperCase().replace(/[':;]/g, "");
+        const words = scene.text.split(' ');
+        const sceneDuration = words.length / wordsPerSec;
+        const timePerWord = sceneDuration / words.length;
 
-        // HORMOZI STYLE: Yellow, Bold, Central, Shadow
-        filterString += `,drawtext=fontfile='${fontPath}':text='${cleanText}':fontcolor=yellow:fontsize=105:x=(w-text_w)/2:y=(h-text_h)/2:borderw=8:bordercolor=black:enable='between(t,${currentTime},${endTime})'`;
+        words.forEach((word, index) => {
+            const wordStart = currentTime + (index * timePerWord);
+            const wordEnd = wordStart + timePerWord;
+            const cleanWord = word.toUpperCase().replace(/[':;]/g, "");
+
+            // NEW: Word-for-word timing logic
+            filterString += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=120:x=(w-text_w)/2:y=(h-text_h)/2:borderw=10:bordercolor=black:enable='between(t,${wordStart.toFixed(2)},${wordEnd.toFixed(2)})'`;
+        });
         
-        currentTime = endTime;
+        currentTime += sceneDuration;
     });
 
-    // TURBO COMMAND: Ultrafast preset + No threads limit
+    // Fix: Explicitly map audio (-map 0:v -map 1:a) to ensure voice.mp3 is used
     const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt -i voice.mp3 \
-        -vf "${filterString}" -c:v libx264 -preset ultrafast -threads 0 -crf 28 -c:a aac -shortest output.mp4`;
+        -filter_complex "[0:v]${filterString}[outv]" -map "[outv]" -map 1:a \
+        -c:v libx264 -preset ultrafast -crf 28 -c:a aac -shortest output.mp4`;
     
     execSync(cmd, { stdio: 'inherit' });
 }
 
 /**
- * STEP 5: YOUTUBE UPLOAD
+ * STEP 5: UPLOAD
  */
 async function uploadToYouTube(fullScript) {
-    console.log("🚀 Step 5: Uploading to @RichDaddyYo...");
-    if (!YT_CLIENT_ID || !YT_REFRESH_TOKEN) {
-        console.log("⏩ Skipping upload: Credentials not set.");
-        return;
-    }
+    console.log("🚀 Step 5: Uploading...");
+    if (!YT_CLIENT_ID || !YT_REFRESH_TOKEN) return;
 
     const oauth2Client = new google.auth.OAuth2(YT_CLIENT_ID, YT_CLIENT_SECRET);
     oauth2Client.setCredentials({ refresh_token: YT_REFRESH_TOKEN });
@@ -143,26 +146,20 @@ async function uploadToYouTube(fullScript) {
     await youtube.videos.insert({
         part: 'snippet,status',
         requestBody: {
-            snippet: { title: 'How to Go Viral (2026 Strategy) #Shorts', description: fullScript, categoryId: '27' },
+            snippet: { title: 'Viral YouTube Secret 2026 #Shorts', description: fullScript, categoryId: '27' },
             status: { privacyStatus: 'public', selfDeclaredMadeForKids: false }
         },
         media: { body: fs.createReadStream('output.mp4') }
     });
 }
 
-/**
- * MAIN EXECUTION
- */
 async function main() {
     try {
-        const startTime = Date.now();
         const scenes = await getContent();
         const videoFiles = await processMedia(scenes);
         await assembleVideo(scenes, videoFiles);
         await uploadToYouTube(scenes.map(s => s.text).join(' '));
-        
-        const totalTime = ((Date.now() - startTime) / 1000 / 60).toFixed(2);
-        console.log(`🏆 DONE! Total time: ${totalTime} minutes.`);
+        console.log(`🏆 DONE! Check your channel!`);
     } catch (e) {
         console.error("🔥 SYSTEM CRASH:", e.message);
         process.exit(1);
@@ -170,4 +167,4 @@ async function main() {
 }
 
 main();
-            
+                   
