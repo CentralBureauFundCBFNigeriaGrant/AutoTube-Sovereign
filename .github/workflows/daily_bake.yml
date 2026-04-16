@@ -1,4 +1,4 @@
-name: AutoTube Engine Run
+name: AutoTube Sovereign v6.0
 
 on:
   workflow_dispatch:
@@ -36,11 +36,11 @@ jobs:
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         run: node video-engine.js
 
-      - name: Upload Generated Video
-        if: always() # This ensures the video is uploaded even if a later step fails
+      - name: Save Video Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: AutoTube-Video-Output
+          name: RichDaddyYo-Final-Video
           path: output.mp4
-          retention-days: 5
+          retention-days: 3
           
