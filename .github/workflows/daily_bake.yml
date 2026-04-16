@@ -1,4 +1,4 @@
-name: AutoTube Sovereign v9.0
+name: AutoTube Sovereign v10.0
 
 on:
   workflow_dispatch:
@@ -10,48 +10,28 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js (with Cache)
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm' # This is the "Magic" switch for caching
 
-      - name: Cache Node Modules
-        id: cache-npm
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install System Dependencies
+      - name: Install System Engine
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg python3-pip fonts-freefont-ttf
+          sudo apt-get install -y ffmpeg fonts-freefont-ttf
+          pip3 install edge-tts
 
-      - name: Install Edge TTS
-        run: pip3 install edge-tts
-
-      - name: Install Node Dependencies
-        if: steps.cache-npm.outputs.cache-hit != 'true'
+      - name: Install Dependencies
         run: npm install axios googleapis
 
       - name: Run AutoTube Engine
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GROQ_API_KEY_2: ${{ secrets.GROQ_API_KEY_2 }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         run: node video-engine.js
-
-      - name: Save Video Artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Viral-Guide-V9
-          path: output.mp4
-          retention-days: 3
-          
+        
