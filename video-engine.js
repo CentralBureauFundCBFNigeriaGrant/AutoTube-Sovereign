@@ -4,7 +4,7 @@ const { execSync } = require('child_process');
 const { google } = require('googleapis');
 
 /**
- * CONFIG & API KEYS
+ * CONFIGURATION
  */
 const GROQ_KEYS = [process.env.GROQ_API_KEY].filter(k => k);
 const PEXELS_API_KEY = process.env.PEXELS_API_KEY; 
@@ -14,11 +14,20 @@ const YT_CLIENT_ID = process.env.YT_CLIENT_ID;
 const YT_CLIENT_SECRET = process.env.YT_CLIENT_SECRET;
 const YT_REFRESH_TOKEN = process.env.YT_REFRESH_TOKEN;
 
+function robustJSONParse(text) {
+    try {
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        if (start === -1 || end === -1) return null;
+        return JSON.parse(text.substring(start, end + 1));
+    } catch (e) { return null; }
+}
+
 /**
- * STEP 1: THE BRAIN (Now 35 Scenes for 60s)
+ * STEP 1: THE BRAIN
  */
 async function getContent() {
-    console.log("🧠 Step 1: Generating 35 Scenes for High Retention...");
+    console.log("🧠 Step 1: Generating Tutor Script...");
     const topic = "How to go viral on YouTube in 2026"; 
     
     for (let key of GROQ_KEYS) {
@@ -30,8 +39,9 @@ async function getContent() {
                         role: "system", 
                         content: `You are a professional YouTube Mentor. Output ONLY JSON.
                         RULES:
-                        1. SCENES: Provide EXACTLY 35 very short scenes (approx 4 words each).
-                        2. KEYWORDS: Keywords must be physical and common (e.g., 'office', 'money', 'forest', 'city') to ensure Pexels finds them.
+                        1. SCENES: Provide EXACTLY 35 very short scenes.
+                        2. TONE: Confident, helpful, instructional. Use commas for natural pauses.
+                        3. KEYWORDS: Specific physical objects only.
                         Return format: {"scenes": [{"text": "SCENE TEXT", "keyword": "search_term"}]}` 
                     },
                     { role: "user", content: `Topic: ${topic}` }
@@ -39,7 +49,7 @@ async function getContent() {
                 response_format: { type: "json_object" }
             }, { headers: { 'Authorization': `Bearer ${key}` }, timeout: 30000 });
 
-            const data = JSON.parse(response.data.choices[0].message.content);
+            const data = robustJSONParse(response.data.choices[0].message.content);
             if (data && data.scenes) return data.scenes;
         } catch (e) { console.warn("⚠️ Groq Key failed..."); }
     }
@@ -50,13 +60,11 @@ async function getContent() {
  * STEP 2 & 3: VOICE & CLIP DOWNLOADS
  */
 async function processMedia(scenes) {
-    console.log("🎙️ Step 2: Generating Pro Voice + VTT Subtitles...");
+    console.log("🎙️ Step 2: Generating Pro Voice...");
     const fullScript = scenes.map(s => s.text).join(' ').replace(/["']/g, "");
-    
-    // We use GuyNeural and tell edge-tts to export a .vtt file for 100% sync
-    execSync(`edge-tts --voice en-US-GuyNeural --text "${fullScript}" --write-media voice.mp3 --write-subtitles subs.vtt`);
+    execSync(`edge-tts --voice en-US-GuyNeural --text "${fullScript}" --write-media voice.mp3 --rate=-10%`);
 
-    console.log(`🎬 Step 3: Fetching 35 Clips (Pexels-First)...`);
+    console.log(`🎬 Step 3: Fetching 35 Clips (Pexels Priority)...`);
     const downloadClip = async (scene, i) => {
         let videoUrl = null;
         const query = encodeURIComponent(scene.keyword);
@@ -96,27 +104,58 @@ async function processMedia(scenes) {
 }
 
 /**
- * STEP 4: TURBO ASSEMBLY
+ * STEP 4: PRECISION ASSEMBLY WITH BACKGROUND MUSIC
  */
 async function assembleVideo(scenes, videoFiles) {
-    console.log("✂️ Step 4: Final Assembly...");
+    console.log("✂️ Step 4: Final Assembly with Background Music...");
     
-    // Calculate scene duration based on audio file length
-    const audioDuration = parseFloat(execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`).toString());
-    const timePerScene = audioDuration / scenes.length;
+    const actualAudioDuration = parseFloat(execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`).toString());
+    const totalScript = scenes.map(s => s.text).join(' ');
+    const totalWordsCount = totalScript.split(' ').length;
+    const preciseTimePerWord = actualAudioDuration / totalWordsCount;
 
     let concatList = "";
-    videoFiles.forEach((file) => { concatList += `file '${file}'\nduration ${timePerScene}\n`; });
+    videoFiles.forEach((file) => { concatList += `file '${file}'\nduration ${actualAudioDuration / scenes.length}\n`; });
     concatList += `file '${videoFiles[videoFiles.length-1]}'`;
     fs.writeFileSync('inputs.txt', concatList);
 
-    // SUBTITLE STYLE: We use the .vtt file directly now for 100% sync
-    // This centers the text and gives it the yellow/bold look
-    const style = "Alignment=10,FontSize=24,PrimaryColour=&H00FFFF&,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=0,Fontname=Arial Black";
+    // Filter logic with Hormozi Style
+    let filterString = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
+    const fontPath = "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf";
+    
+    let currentTime = 0;
+    scenes.forEach((scene) => {
+        const words = scene.text.split(' ');
+        words.forEach((word) => {
+            const start = currentTime;
+            const end = start + preciseTimePerWord;
+            const cleanWord = word.toUpperCase().replace(/[':;]/g, "");
+            filterString += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=150:x=(w-text_w)/2:y=(h-text_h)/2:borderw=20:bordercolor=black:enable='between(t,${start.toFixed(2)},${end.toFixed(2)})'`;
+            currentTime = end;
+        });
+    });
 
-    const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt -i voice.mp3 \
-        -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles=subs.vtt:force_style='${style}'" \
-        -c:v libx264 -preset ultrafast -t ${audioDuration} -c:a aac output.mp4`;
+    filterString += "[outv]";
+    fs.writeFileSync('filters.txt', filterString);
+
+    // Check for background music file, otherwise skip mixing
+    let audioInput = "-i voice.mp3";
+    let audioFilter = '[1:a]copy[aout]'; // Default: just the voice
+    
+    if (fs.existsSync('background.mp3')) {
+        console.log("🎵 Mixing background.mp3...");
+        audioInput = "-i voice.mp3 -i background.mp3";
+        // Mix voice (1:a) at 100% and music (2:a) at 12% volume
+        audioFilter = '[2:a]volume=0.12[bg];[1:a][bg]amix=inputs=2:duration=first[aout]';
+    } else {
+        console.log("⚠️ background.mp3 not found. Video will have no music.");
+    }
+
+    const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt ${audioInput} \
+        -filter_complex_script filters.txt \
+        -filter_complex "${audioFilter}" \
+        -map "[outv]" -map "[aout]" \
+        -c:v libx264 -preset ultrafast -t ${actualAudioDuration} -c:a aac output.mp4`;
     
     execSync(cmd, { stdio: 'inherit' });
 }
@@ -135,7 +174,7 @@ async function uploadToYouTube(fullScript) {
     await youtube.videos.insert({
         part: 'snippet,status',
         requestBody: {
-            snippet: { title: 'Viral Mentor Strategy 2026 #Shorts', description: fullScript, categoryId: '27' },
+            snippet: { title: 'Viral Strategy 2026 #Shorts', description: fullScript, categoryId: '27' },
             status: { privacyStatus: 'public', selfDeclaredMadeForKids: false }
         },
         media: { body: fs.createReadStream('output.mp4') }
@@ -148,7 +187,7 @@ async function main() {
         const videoFiles = await processMedia(scenes);
         await assembleVideo(scenes, videoFiles);
         await uploadToYouTube(scenes.map(s => s.text).join(' '));
-        console.log(`🏆 SUCCESS! Everything synced.`);
+        console.log(`🏆 SUCCESS! Everything synced with background music.`);
     } catch (e) {
         console.error("🔥 ERROR:", e.message);
         process.exit(1);
