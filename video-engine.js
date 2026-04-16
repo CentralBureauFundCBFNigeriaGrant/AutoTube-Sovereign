@@ -4,11 +4,11 @@ const { execSync } = require('child_process');
 const { google } = require('googleapis');
 
 /**
- * CONFIGURATION
+ * CONFIGURATION & API KEYS
  */
 const GROQ_KEYS = [process.env.GROQ_API_KEY].filter(k => k);
 const PIXABAY_API_KEY = process.env.PIXABAY_API_KEY;
-const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
+const PEXELS_API_KEY = process.env.PEXELS_API_KEY; 
 
 const YT_CLIENT_ID = process.env.YT_CLIENT_ID;
 const YT_CLIENT_SECRET = process.env.YT_CLIENT_SECRET;
@@ -24,7 +24,7 @@ function robustJSONParse(text) {
 }
 
 /**
- * STEP 1: THE BRAIN (Now with 25 Precise Scenes)
+ * STEP 1: THE BRAIN (25 Scenes for High Retention)
  */
 async function getContent() {
     console.log("🧠 Step 1: Generating 60-second Viral Script...");
@@ -37,13 +37,11 @@ async function getContent() {
                 messages: [
                     { 
                         role: "system", 
-                        content: `You are a YouTube Shorts expert. Output ONLY JSON.
+                        content: `You are a viral YouTube Shorts creator. Output ONLY JSON.
                         RULES:
                         1. SCENES: Provide EXACTLY 25 short scenes.
-                        2. TOTAL WORDS: Total script must be around 140-150 words (perfect for 60 seconds).
-                        3. KEYWORDS: The 'keyword' for each scene MUST be a physical object or action (e.g., 'fast car', 'man thinking', 'exploding rocket') that Pixabay can find.
-                        4. HOOK: Start with a high-energy scroll-stopper.
-                        5. CTA: End with "Subscribe for more viral secrets!"
+                        2. KEYWORDS: Each keyword MUST be a specific visual (e.g., 'money falling', 'fast car', 'man screaming').
+                        3. STRUCTURE: Powerful hook in scene 1. Subscribe CTA in scene 25.
                         Return format: {"scenes": [{"text": "SCENE TEXT", "keyword": "search_term"}]}` 
                     },
                     { role: "user", content: `Topic: ${topic}` }
@@ -52,84 +50,105 @@ async function getContent() {
             }, { headers: { 'Authorization': `Bearer ${key}` }, timeout: 30000 });
 
             const data = robustJSONParse(response.data.choices[0].message.content);
-            if (data && data.scenes && data.scenes.length >= 20) return data.scenes;
-        } catch (e) { console.warn("⚠️ Groq Key failed, retrying..."); }
+            if (data && data.scenes) return data.scenes;
+        } catch (e) { console.warn("⚠️ Groq Key failed, trying next..."); }
     }
     throw new Error("Failed to generate script.");
 }
 
 /**
- * STEP 2 & 3: VOICE & CLIP FETCHING
+ * STEP 2 & 3: NATURAL VOICE & MULTI-LAYER FALLBACK
  */
 async function processMedia(scenes) {
     console.log("🎙️ Step 2: Generating Natural Voiceover...");
     const fullScript = scenes.map(s => s.text).join(' ');
-    const safeScript = fullScript.replace(/["']/g, "");
-    
-    // REMOVED +10% rate for natural human pace
-    execSync(`edge-tts --voice en-NG-AbeoNeural --text "${safeScript}" --write-media voice.mp3 --rate=+0%`);
+    // Rate set to +0% for natural human pace
+    execSync(`edge-tts --voice en-NG-AbeoNeural --text "${fullScript.replace(/["']/g, "")}" --write-media voice.mp3 --rate=+0%`);
 
-    console.log(`🎬 Step 3: Fetching ${scenes.length} Clips...`);
+    console.log("🎬 Step 3: Fetching 25 Clips with Multi-Layer Fallback...");
+
     const downloadClip = async (scene, i) => {
-        let videoUrl = "https://cdn.pixabay.com/video/2016/09/13/5053-181585489_large.mp4"; 
+        let videoUrl = null;
+        const query = encodeURIComponent(scene.keyword);
+
+        // FALLBACK LAYER 1: PIXABAY
         try {
-            const pxa = await axios.get(`https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(scene.keyword)}&orientation=vertical&per_page=3`, { timeout: 10000 });
-            if (pxa.data.hits?.length > 0) {
-                videoUrl = pxa.data.hits[0].videos.medium.url;
-            }
-        } catch (e) { console.log(`⚠️ Clip ${i} keyword: ${scene.keyword} not found, using backup.`); }
+            const res = await axios.get(`https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=${query}&orientation=vertical&per_page=3`, { timeout: 8000 });
+            if (res.data.hits?.length > 0) videoUrl = res.data.hits[0].videos.medium.url;
+        } catch (e) { console.log(`❌ Pixabay failed for clip ${i}`); }
+
+        // FALLBACK LAYER 2: PEXELS
+        if (!videoUrl && PEXELS_API_KEY) {
+            try {
+                const res = await axios.get(`https://api.pexels.com/videos/search?query=${query}&orientation=portrait&per_page=1`, {
+                    headers: { 'Authorization': PEXELS_API_KEY }, timeout: 8000
+                });
+                if (res.data.videos?.length > 0) videoUrl = res.data.videos[0].video_files[0].link;
+            } catch (e) { console.log(`❌ Pexels failed for clip ${i}`); }
+        }
+
+        // FALLBACK LAYER 3: BROAD PIXABAY SEARCH
+        if (!videoUrl) {
+            try {
+                const res = await axios.get(`https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=success+motivation&orientation=vertical&per_page=10`);
+                videoUrl = res.data.hits[Math.floor(Math.random() * res.data.hits.length)].videos.medium.url;
+            } catch (e) { videoUrl = null; }
+        }
 
         const path = `clip_${i}.mp4`;
+        
+        // FALLBACK LAYER 4: LOCAL BACKUP
+        if (!videoUrl) {
+            console.log(`⚠️ All APIs failed for clip ${i}. Using backup.mp4`);
+            if (fs.existsSync('backup.mp4')) {
+                fs.copyFileSync('backup.mp4', path);
+            } else {
+                console.error("🚨 CRITICAL: backup.mp4 missing! Using emergency color source.");
+                execSync(`ffmpeg -f lavfi -i color=c=black:s=1080x1920:d=3 -pix_fmt yuv420p ${path}`);
+            }
+            return;
+        }
+
         const writer = fs.createWriteStream(path);
         const response = await axios({ url: videoUrl, method: 'GET', responseType: 'stream' });
         response.data.pipe(writer);
         return new Promise(r => writer.on('finish', r));
     };
 
-    // Download in batches of 5 to avoid hitting API rate limits
     for (let i = 0; i < scenes.length; i += 5) {
-        const batch = scenes.slice(i, i + 5).map((s, idx) => downloadClip(s, i + idx));
-        await Promise.all(batch);
+        await Promise.all(scenes.slice(i, i + 5).map((s, idx) => downloadClip(s, i + idx)));
     }
     return scenes.map((_, i) => `clip_${i}.mp4`);
 }
 
 /**
- * STEP 4: PRECISE ASSEMBLY
+ * STEP 4: PRECISE ASSEMBLY (Word-for-Word Sync)
  */
 async function assembleVideo(scenes, videoFiles) {
-    console.log("✂️ Step 4: Syncing Subtitles and 25 Clips...");
-    
-    // We force each clip to be exactly its portion of the 60 seconds
+    console.log("✂️ Step 4: Syncing Subtitles and Clips...");
     const TOTAL_DURATION = 60; 
-    const timePerScene = TOTAL_DURATION / scenes.length; // 60 / 25 = 2.4s per clip
+    const timePerScene = TOTAL_DURATION / scenes.length; 
 
     let filterString = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
     const fontPath = "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf";
     
-    let currentTime = 0;
-    
-    // Prepare the list of clips with specific durations for FFmpeg concat
     let concatList = "";
-    videoFiles.forEach((file, i) => {
-        concatList += `file '${file}'\nduration ${timePerScene}\n`;
-    });
-    // Final file entry requires no duration or a repeat to close properly
+    videoFiles.forEach((file) => { concatList += `file '${file}'\nduration ${timePerScene}\n`; });
     concatList += `file '${videoFiles[videoFiles.length-1]}'`;
     fs.writeFileSync('inputs.txt', concatList);
 
-    scenes.forEach((scene, sIdx) => {
+    let currentTime = 0;
+    scenes.forEach((scene) => {
         const words = scene.text.split(' ');
         const timePerWord = timePerScene / words.length;
 
         words.forEach((word, wIdx) => {
-            const wordStart = currentTime + (wIdx * timePerWord);
-            const wordEnd = wordStart + timePerWord;
+            const start = currentTime + (wIdx * timePerWord);
+            const end = start + timePerWord;
             const cleanWord = word.toUpperCase().replace(/[':;]/g, "");
-
-            filterString += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=110:x=(w-text_w)/2:y=(h-text_h)/2:borderw=10:bordercolor=black:enable='between(t,${wordStart.toFixed(2)},${wordEnd.toFixed(2)})'`;
+            
+            filterString += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=120:x=(w-text_w)/2:y=(h-text_h)/2:borderw=10:bordercolor=black:enable='between(t,${start.toFixed(2)},${end.toFixed(2)})'`;
         });
-        
         currentTime += timePerScene;
     });
 
@@ -141,7 +160,7 @@ async function assembleVideo(scenes, videoFiles) {
 }
 
 /**
- * STEP 5: UPLOAD
+ * STEP 5: YOUTUBE UPLOAD
  */
 async function uploadToYouTube(fullScript) {
     console.log("🚀 Step 5: Uploading...");
@@ -154,11 +173,7 @@ async function uploadToYouTube(fullScript) {
     await youtube.videos.insert({
         part: 'snippet,status',
         requestBody: {
-            snippet: { 
-                title: 'How to Go Viral in 2026 #Shorts', 
-                description: fullScript, 
-                categoryId: '27' 
-            },
+            snippet: { title: 'Viral Strategy 2026 #Shorts', description: fullScript, categoryId: '27' },
             status: { privacyStatus: 'public', selfDeclaredMadeForKids: false }
         },
         media: { body: fs.createReadStream('output.mp4') }
@@ -171,7 +186,7 @@ async function main() {
         const videoFiles = await processMedia(scenes);
         await assembleVideo(scenes, videoFiles);
         await uploadToYouTube(scenes.map(s => s.text).join(' '));
-        console.log(`🏆 SUCCESS: 60s Video Uploaded.`);
+        console.log(`🏆 SUCCESS! Video posted.`);
     } catch (e) {
         console.error("🔥 ERROR:", e.message);
         process.exit(1);
@@ -179,4 +194,3 @@ async function main() {
 }
 
 main();
-            
