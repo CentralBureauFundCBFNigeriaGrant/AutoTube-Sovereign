@@ -9,8 +9,25 @@ const PIXABAY_API_KEY = process.env.PIXABAY_API_KEY;
 const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
 
 /**
- * UTILITY: JSON Extraction
+ * UTILITY: Word Wrap for FFmpeg
+ * Prevents text from going off-screen by splitting long lines.
  */
+function wrapText(text, maxChars = 15) {
+    const words = text.split(' ');
+    let lines = [];
+    let currentLine = "";
+    words.forEach(word => {
+        if ((currentLine + word).length > maxChars) {
+            lines.push(currentLine.trim());
+            currentLine = word + " ";
+        } else {
+            currentLine += word + " ";
+        }
+    });
+    lines.push(currentLine.trim());
+    return lines.join('\n');
+}
+
 function robustJSONParse(text) {
     try {
         const start = text.indexOf('{');
@@ -22,10 +39,10 @@ function robustJSONParse(text) {
 }
 
 /**
- * STEP 1: THE BRAIN (Now strictly filtering meta-talk)
+ * STEP 1: THE BRAIN (Ultra-Short Scenes for Fast Switching)
  */
 async function getContent() {
-    console.log("🧠 Step 1: Generating Scene-by-Scene Script...");
+    console.log("🧠 Step 1: Generating High-Speed Hormozi Script...");
     for (let i = 0; i < GROQ_KEYS.length; i++) {
         try {
             const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
@@ -33,13 +50,11 @@ async function getContent() {
                 messages: [
                     { 
                         role: "system", 
-                        content: "You are a viral YouTube creator. Output ONLY JSON. DO NOT include stage directions, speaker names, or transition notes. The 'text' field must contain ONLY what the person says." 
+                        content: "You are a viral creator. Respond ONLY with JSON. Break the 58-second script into 15+ micro-scenes. Each scene must be 3-6 words MAX. This ensures the video switches VERY FAST." 
                     },
                     { 
                         role: "user", 
-                        content: `Create a 58-second high-energy script about 'Financial Freedom with AI'. 
-                        Break it into 10 scenes. 
-                        Format: {"scenes": [{"text": "You are losing money every second you aren't using AI.", "keyword": "digital money pulse"}]}` 
+                        content: `Topic: 'AI Wealth Secret'. Return format: {"scenes": [{"text": "STOP WASTING TIME.", "keyword": "angry man"}, {"text": "AI IS THE KEY.", "keyword": "digital brain"}]}` 
                     }
                 ],
                 response_format: { type: "json_object" }
@@ -47,7 +62,7 @@ async function getContent() {
 
             const data = robustJSONParse(response.data.choices[0].message.content);
             if (data && data.scenes) return data.scenes;
-        } catch (e) { console.warn(`⚠️ Groq Key ${i+1} failed.`); }
+        } catch (e) { console.warn(`⚠️ Key ${i+1} failed.`); }
     }
     throw new Error("All Groq keys failed.");
 }
@@ -56,9 +71,9 @@ async function getContent() {
  * STEP 2 & 3: VOICE & DUAL-API VISUALS
  */
 async function processMedia(scenes) {
-    console.log("🎙️ Step 2: Generating Natural Voiceover...");
+    console.log("🎙️ Step 2: Generating Voiceover...");
     const fullScript = scenes.map(s => s.text).join(' ');
-    // RATE FIXED TO +0% FOR NATURAL SPEECH
+    // Natural rate (+0%) for clean pronunciation
     const voiceCmd = `edge-tts --voice en-NG-AbeoNeural --text "${fullScript.replace(/"/g, '')}" --write-media voice.mp3 --rate=+0%`;
     execSync(voiceCmd);
 
@@ -66,32 +81,23 @@ async function processMedia(scenes) {
     for (let i = 0; i < scenes.length; i++) {
         const filename = `clip_${i}.mp4`;
         const keyword = scenes[i].keyword;
-        console.log(`🎬 Fetching Clip ${i+1} for: ${keyword}`);
-        
         let videoUrl = null;
 
-        // Try Pixabay First
         try {
             const pxa = await axios.get(`https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(keyword)}&orientation=vertical&per_page=3`);
             if (pxa.data.hits?.length > 0) videoUrl = pxa.data.hits[0].videos.large.url;
-        } catch (e) { console.warn("  - Pixabay skipped."); }
+        } catch (e) {}
 
-        // Try Pexels Backup
         if (!videoUrl && PEXELS_API_KEY) {
             try {
-                console.log("  - Falling back to Pexels...");
                 const pex = await axios.get(`https://api.pexels.com/videos/search?query=${encodeURIComponent(keyword)}&orientation=portrait&per_page=1`, {
                     headers: { 'Authorization': PEXELS_API_KEY }
                 });
-                if (pex.data.videos?.length > 0) videoUrl = pex.data.videos[0].video_files.find(f => f.quality === 'hd' || f.quality === 'sd').link;
-            } catch (e) { console.warn("  - Pexels skipped."); }
+                if (pex.data.videos?.length > 0) videoUrl = pex.data.videos[0].video_files.find(f => f.quality === 'hd').link;
+            } catch (e) {}
         }
 
-        // Final Safety Fallback
-        if (!videoUrl) {
-            console.log("  - Using Emergency Safety Clip.");
-            videoUrl = "https://cdn.pixabay.com/video/2016/09/13/5053-181585489_large.mp4"; 
-        }
+        if (!videoUrl) videoUrl = "https://cdn.pixabay.com/video/2016/09/13/5053-181585489_large.mp4";
 
         const writer = fs.createWriteStream(filename);
         const stream = await axios({ url: videoUrl, method: 'GET', responseType: 'stream' });
@@ -103,32 +109,34 @@ async function processMedia(scenes) {
 }
 
 /**
- * STEP 4: THE EDITOR (Hormozi Masterpiece)
+ * STEP 4: THE EDITOR (The "Perfect Hormozi" Subtitles)
  */
 async function assembleVideo(scenes, videoFiles) {
-    console.log("✂️ Step 4: Final Assembly with Thick Subtitles...");
+    console.log("✂️ Step 4: Mastering Hormozi Style...");
     
     const listContent = videoFiles.map(f => `file '${f}'`).join('\n');
     fs.writeFileSync('inputs.txt', listContent);
 
+    // Font path for Ubuntu (GitHub Actions)
+    const fontPath = "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf";
+
     let filterString = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920";
     let currentTime = 0;
-    const wordsPerSecond = 2.4; // Slightly slower for natural feel
+    const wordsPerSecond = 2.4; 
 
     scenes.forEach((scene) => {
         const duration = scene.text.split(' ').length / wordsPerSecond;
         const endTime = currentTime + duration;
-        // Forces Uppercase and removes special characters for clean subtitles
-        const cleanText = scene.text.toUpperCase().replace(/[^\w\s]/gi, '');
         
-        // HORMOZI STYLE: Yellow, Bold, Thick 10px Border
-        filterString += `,drawtext=text='${cleanText}':fontcolor=yellow:fontsize=80:x=(w-text_w)/2:y=(h-text_h)/2:borderw=10:bordercolor=black:enable='between(t,${currentTime},${endTime})'`;
+        // Wrap text to ensure it stays in the middle and doesn't cut off
+        const wrappedText = wrapText(scene.text.toUpperCase(), 12);
+        const escapedText = wrappedText.replace(/'/g, "").replace(/:/g, "\\:");
+
+        // MASSIVE YELLOW TEXT | THICK BORDER | CENTERED
+        filterString += `,drawtext=fontfile='${fontPath}':text='${escapedText}':fontcolor=yellow:fontsize=110:x=(w-text_w)/2:y=(h-text_h)/2:borderw=12:bordercolor=black:line_spacing=10:enable='between(t,${currentTime},${endTime})'`;
         
         currentTime = endTime;
     });
-
-    // Sub-Watermark
-    filterString += `,drawtext=text='@RICHDADDYYO':fontcolor=white@0.4:fontsize=35:x=(w-text_w)/2:y=h-200`;
 
     const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt -i voice.mp3 \
         -vf "${filterString}" -c:v libx264 -preset ultrafast -c:a aac -shortest output.mp4`;
@@ -136,9 +144,6 @@ async function assembleVideo(scenes, videoFiles) {
     execSync(cmd, { stdio: 'inherit' });
 }
 
-/**
- * STEP 5: THE DELIVERY
- */
 async function uploadToYouTube(fullScript) {
     console.log("🚀 Step 5: Uploading...");
     const oauth2Client = new google.auth.OAuth2(process.env.YT_CLIENT_ID, process.env.YT_CLIENT_SECRET);
@@ -161,11 +166,10 @@ async function main() {
         const videoFiles = await processMedia(scenes);
         await assembleVideo(scenes, videoFiles);
         await uploadToYouTube(scenes.map(s => s.text).join(' '));
-        console.log("🏆 V7 MISSION SUCCESSFUL!");
+        console.log("🏆 V8 SUCCESSFUL!");
     } catch (e) {
         console.error("🔥 ERROR:", e.message);
         process.exit(1);
     }
 }
-
 main();
