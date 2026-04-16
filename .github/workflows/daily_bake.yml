@@ -2,43 +2,55 @@ name: AutoTube Autonomous Engine
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
-  workflow_dispatch:
-    inputs:
-      niche:
-        description: 'The niche/topic for the video'
-        required: true
-        default: 'YouTube Growth'
+    - cron: '0 9,21 * * *' # Runs twice a day (9 AM and 9 PM)
+  workflow_dispatch: # Allows you to run it manually for testing
 
 jobs:
-  build:
+  build-and-post:
     runs-on: ubuntu-latest
-    env:
-      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
-      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
-      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }} # Added the Brain's API Key
-      INPUT_NICHE: ${{ github.event.inputs.niche }}
 
     steps:
-      - name: 1. Checkout Repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 2. Setup Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
-      - name: 3. Install Tools & Dependencies
+      - name: Install FFmpeg & Fonts
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg libass-dev fonts-dejavu
-          npm install gtts fluent-ffmpeg googleapis groq-sdk
+          sudo apt-get install -y ffmpeg ttf-mscorefonts-installer
+          # Accept the license for Microsoft fonts (Impact)
+          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
 
-      - name: 4. Run AutoTube Engine
+      - name: Install Dependencies
+        run: npm install axios openai @google-cloud/text-to-speech googleapis
+
+      - name: Setup Google Cloud Credentials
         run: |
-          node index.js
-          node audio-mixer.js
-          node video-engine.js
-          node youtube-uploader.js
-          
+          echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}" > google-creds.json
+        # Note: Make sure your secret name matches this exactly
+
+      - name: Run AutoTube Engine
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          GOOGLE_APPLICATION_CREDENTIALS: ./google-creds.json
+        run: node video-engine.js
+
+      - name: Upload Logs (Optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: execution-logs
+          path: |
+            output.mp4
+            subs.vtt
+            
