@@ -1,65 +1,40 @@
-name: AutoTube Master Engine
+name: AutoTube Engine Run
 
 on:
-  schedule:
-    # 7 AM, 9 AM, 1 PM, 3 PM, 7 PM, 9 PM (WAT)
-    - cron: '0 6,8,12,14,18,20 * * *'
-  workflow_dispatch: 
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '0 12 * * *' # Optional: Runs daily at 12:00 PM
 
 jobs:
-  build-and-post:
+  build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v3
         with:
           node-version: '20'
-          # CRITICAL: We leave 'cache' out here to prevent the lock file error
 
-      - name: Custom Dependency Cache
-        id: cache-npm
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          # We use package.json as the key instead of a lock file
-          key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install FFmpeg & Fonts
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg ttf-mscorefonts-installer
-          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
+          sudo apt-get install -y ffmpeg python3-pip
 
-      - name: Install Dependencies
-        # Only runs if the cache doesn't exist yet
-        if: steps.cache-npm.outputs.cache-hit != 'true'
-        run: npm install
+      - name: Install Edge TTS (The Secret Weapon)
+        run: pip3 install edge-tts
 
-      - name: Setup Google Cloud Credentials
-        run: |
-          echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}" > google-creds.json
+      - name: Install Node Dependencies
+        run: npm install axios googleapis
 
-      - name: Run AutoTube Engine
+      - name: Run AutoTube Sovereign v5.0
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_API_KEY_2: ${{ secrets.GROQ_API_KEY_2 }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
-          GOOGLE_APPLICATION_CREDENTIALS: ./google-creds.json
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         run: node video-engine.js
-
-      - name: Upload Final Movie
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Final-Video
-          path: output.mp4
-          
+        
