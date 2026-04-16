@@ -24,7 +24,7 @@ function robustJSONParse(text) {
 }
 
 /**
- * STEP 1: THE BRAIN (25 Scenes for High Retention)
+ * STEP 1: THE BRAIN
  */
 async function getContent() {
     console.log("🧠 Step 1: Generating 60-second Viral Script...");
@@ -40,8 +40,7 @@ async function getContent() {
                         content: `You are a viral YouTube Shorts creator. Output ONLY JSON.
                         RULES:
                         1. SCENES: Provide EXACTLY 25 short scenes.
-                        2. KEYWORDS: Each keyword MUST be a specific visual (e.g., 'money falling', 'fast car', 'man screaming').
-                        3. STRUCTURE: Powerful hook in scene 1. Subscribe CTA in scene 25.
+                        2. KEYWORDS: Each keyword MUST be a specific visual.
                         Return format: {"scenes": [{"text": "SCENE TEXT", "keyword": "search_term"}]}` 
                     },
                     { role: "user", content: `Topic: ${topic}` }
@@ -51,61 +50,42 @@ async function getContent() {
 
             const data = robustJSONParse(response.data.choices[0].message.content);
             if (data && data.scenes) return data.scenes;
-        } catch (e) { console.warn("⚠️ Groq Key failed, trying next..."); }
+        } catch (e) { console.warn("⚠️ Groq Key failed..."); }
     }
     throw new Error("Failed to generate script.");
 }
 
 /**
- * STEP 2 & 3: NATURAL VOICE & MULTI-LAYER FALLBACK
+ * STEP 2 & 3: VOICE & FALLBACK MEDIA
  */
 async function processMedia(scenes) {
     console.log("🎙️ Step 2: Generating Natural Voiceover...");
     const fullScript = scenes.map(s => s.text).join(' ');
-    // Rate set to +0% for natural human pace
     execSync(`edge-tts --voice en-NG-AbeoNeural --text "${fullScript.replace(/["']/g, "")}" --write-media voice.mp3 --rate=+0%`);
 
-    console.log("🎬 Step 3: Fetching 25 Clips with Multi-Layer Fallback...");
-
+    console.log("🎬 Step 3: Fetching Clips...");
     const downloadClip = async (scene, i) => {
         let videoUrl = null;
         const query = encodeURIComponent(scene.keyword);
 
-        // FALLBACK LAYER 1: PIXABAY
         try {
             const res = await axios.get(`https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=${query}&orientation=vertical&per_page=3`, { timeout: 8000 });
             if (res.data.hits?.length > 0) videoUrl = res.data.hits[0].videos.medium.url;
-        } catch (e) { console.log(`❌ Pixabay failed for clip ${i}`); }
+        } catch (e) {}
 
-        // FALLBACK LAYER 2: PEXELS
         if (!videoUrl && PEXELS_API_KEY) {
             try {
                 const res = await axios.get(`https://api.pexels.com/videos/search?query=${query}&orientation=portrait&per_page=1`, {
                     headers: { 'Authorization': PEXELS_API_KEY }, timeout: 8000
                 });
                 if (res.data.videos?.length > 0) videoUrl = res.data.videos[0].video_files[0].link;
-            } catch (e) { console.log(`❌ Pexels failed for clip ${i}`); }
-        }
-
-        // FALLBACK LAYER 3: BROAD PIXABAY SEARCH
-        if (!videoUrl) {
-            try {
-                const res = await axios.get(`https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}&q=success+motivation&orientation=vertical&per_page=10`);
-                videoUrl = res.data.hits[Math.floor(Math.random() * res.data.hits.length)].videos.medium.url;
-            } catch (e) { videoUrl = null; }
+            } catch (e) {}
         }
 
         const path = `clip_${i}.mp4`;
-        
-        // FALLBACK LAYER 4: LOCAL BACKUP
         if (!videoUrl) {
-            console.log(`⚠️ All APIs failed for clip ${i}. Using backup.mp4`);
-            if (fs.existsSync('backup.mp4')) {
-                fs.copyFileSync('backup.mp4', path);
-            } else {
-                console.error("🚨 CRITICAL: backup.mp4 missing! Using emergency color source.");
-                execSync(`ffmpeg -f lavfi -i color=c=black:s=1080x1920:d=3 -pix_fmt yuv420p ${path}`);
-            }
+            console.log(`⚠️ Using backup.mp4 for clip ${i}`);
+            fs.copyFileSync('backup.mp4', path);
             return;
         }
 
@@ -122,14 +102,15 @@ async function processMedia(scenes) {
 }
 
 /**
- * STEP 4: PRECISE ASSEMBLY (Word-for-Word Sync)
+ * STEP 4: PRECISE ASSEMBLY (SOLVING E2BIG ERROR)
  */
 async function assembleVideo(scenes, videoFiles) {
-    console.log("✂️ Step 4: Syncing Subtitles and Clips...");
+    console.log("✂️ Step 4: Syncing Subtitles via Filter Script...");
     const TOTAL_DURATION = 60; 
     const timePerScene = TOTAL_DURATION / scenes.length; 
 
-    let filterString = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
+    // We start the filter by labeling the first input [0:v]
+    let filterString = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
     const fontPath = "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf";
     
     let concatList = "";
@@ -147,20 +128,28 @@ async function assembleVideo(scenes, videoFiles) {
             const end = start + timePerWord;
             const cleanWord = word.toUpperCase().replace(/[':;]/g, "");
             
+            // We append each drawtext to the chain
             filterString += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=120:x=(w-text_w)/2:y=(h-text_h)/2:borderw=10:bordercolor=black:enable='between(t,${start.toFixed(2)},${end.toFixed(2)})'`;
         });
         currentTime += timePerScene;
     });
 
+    // Add final output label
+    filterString += "[outv]";
+
+    // Write the massive filter string to a file to prevent E2BIG error
+    fs.writeFileSync('filters.txt', filterString);
+
+    // NEW COMMAND: Uses -filter_complex_script to read from the file
     const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt -i voice.mp3 \
-        -filter_complex "[0:v]${filterString}[outv]" -map "[outv]" -map 1:a \
+        -filter_complex_script filters.txt -map "[outv]" -map 1:a \
         -c:v libx264 -preset ultrafast -t 60 -c:a aac output.mp4`;
     
     execSync(cmd, { stdio: 'inherit' });
 }
 
 /**
- * STEP 5: YOUTUBE UPLOAD
+ * STEP 5: UPLOAD
  */
 async function uploadToYouTube(fullScript) {
     console.log("🚀 Step 5: Uploading...");
@@ -186,7 +175,7 @@ async function main() {
         const videoFiles = await processMedia(scenes);
         await assembleVideo(scenes, videoFiles);
         await uploadToYouTube(scenes.map(s => s.text).join(' '));
-        console.log(`🏆 SUCCESS! Video posted.`);
+        console.log(`🏆 SUCCESS! E2BIG Error bypassed. Video posted.`);
     } catch (e) {
         console.error("🔥 ERROR:", e.message);
         process.exit(1);
