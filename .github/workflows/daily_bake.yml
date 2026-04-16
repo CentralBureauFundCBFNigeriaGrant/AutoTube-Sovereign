@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -19,7 +19,7 @@ jobs:
       - name: Install System Engine
         run: |
           sudo apt-get update
-          # Added libass-dev to handle the new .vtt subtitle rendering
+          # Including libass-dev is CRITICAL for the .vtt subtitle rendering
           sudo apt-get install -y ffmpeg fonts-freefont-ttf libass-dev
           pip3 install edge-tts
 
@@ -35,4 +35,3 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         run: node video-engine.js
-        
