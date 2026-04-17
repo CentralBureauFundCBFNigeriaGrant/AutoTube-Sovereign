@@ -1,9 +1,10 @@
 // ===================================================================
-// 🛰️ AUTO-TUBE SOVEREIGN V12.1 - EDGE TTS WORD-PERFECT GODZILLA
+// 🛰️ AUTO-TUBE SOVEREIGN V13.0 - EDGE TTS CHARACTER-WEIGHTED GODZILLA
 // ===================================================================
-// - Uses Edge TTS built‑in word‑boundary for frame‑perfect subtitles
+// - Uses Edge TTS with VTT subtitles for scene timing
+// - Character-weighted word timing for natural subtitle flow
 // - No Google Cloud / Aeneas / Extra Python required
-// - Forces Exactly 20 Scenes for 60s Video
+// - Strict 20 scenes = 60 seconds
 // - 100% Free & Reliable on GitHub Actions
 // ===================================================================
 
@@ -165,22 +166,21 @@ async function processMedia(scenes) {
     return scenes.map((_, i) => `clip_${i}.mp4`);
 }
 
-// ========== STEP 3: GENERATE VOICEOVER + WORD BOUNDARIES WITH EDGE TTS ==========
+// ========== STEP 3: GENERATE VOICEOVER + SCENE TIMINGS WITH EDGE TTS ==========
 async function generateVoiceover(scenes) {
     console.log("🔊 Generating perfect 60s Nigerian Male voiceover with Edge TTS...");
 
-    // 1. Create plain text file (newlines create natural pauses)
+    // Plain text with newlines for natural pauses
     const plainText = scenes.map(scene => scene.text).join('\n');
     fs.writeFileSync('script.txt', plainText);
     console.log("   📝 Plain text script written.");
 
-    // Helper to synthesize with a specific rate and capture word boundaries
+    // Helper to synthesize with a specific rate and capture VTT subtitles
     const synthesize = (ratePercent) => {
         try { fs.unlinkSync('voice.mp3'); } catch (e) {}
-        try { fs.unlinkSync('boundaries.json'); } catch (e) {}
+        try { fs.unlinkSync('subtitles.vtt'); } catch (e) {}
         const rateArg = `${ratePercent > 0 ? '+' : ''}${ratePercent}%`;
-        // --word-boundary writes a JSON file with precise word timings
-        const cmd = `edge-tts --voice ${TTS_VOICE} --file script.txt --write-media voice.mp3 --rate=${rateArg} --word-boundary boundaries.json`;
+        const cmd = `edge-tts --voice ${TTS_VOICE} --file script.txt --write-media voice.mp3 --rate=${rateArg} --write-subtitles subtitles.vtt`;
         execSync(cmd, { stdio: 'pipe' });
         const dur = parseFloat(execSync(
             `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`
@@ -188,7 +188,7 @@ async function generateVoiceover(scenes) {
         return dur;
     };
 
-    // 2. Iterate to hit exactly 60 seconds
+    // Iterate to hit exactly 60 seconds
     let currentRate = 0;
     let duration = synthesize(currentRate);
     console.log(`   ⏱️ Initial duration (${currentRate}% rate): ${duration.toFixed(1)}s`);
@@ -211,53 +211,81 @@ async function generateVoiceover(scenes) {
         }
     }
     
-    console.log(`   🔈 Voiceover ready. Word boundaries saved.`);
+    console.log(`   🔈 Voiceover ready. VTT subtitles saved.`);
 }
 
-// ========== STEP 4: ASSEMBLE VIDEO WITH PERFECT SUBTITLES ==========
+// ========== STEP 4: ASSEMBLE VIDEO WITH CHARACTER-WEIGHTED WORD SUBTITLES ==========
 async function assembleVideo(scenes, videoFiles) {
-    console.log("🎞️ Assembling final video with word‑perfect subtitles...");
+    console.log("🎞️ Assembling final video with character-weighted word subtitles...");
 
     const audioPath = 'voice.mp3';
     const bgMusicPath = 'bg.mp3';
     const audioDur = parseFloat(execSync(
         `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ${audioPath}`
     ).toString());
-    const clipDuration = audioDur / scenes.length;
+    
+    // Parse VTT to get scene start/end times
+    let sceneTimes = [];
+    try {
+        const vttContent = fs.readFileSync('subtitles.vtt', 'utf8');
+        const cueRegex = /(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})\n([\s\S]*?)(?=\n\n|\n*$)/g;
+        let match;
+        let idx = 0;
+        while ((match = cueRegex.exec(vttContent)) !== null && idx < scenes.length) {
+            const startTime = match[1];
+            const endTime = match[2];
+            // Convert timestamp to seconds
+            const toSeconds = (t) => {
+                const [h, m, s] = t.split(':');
+                return parseFloat(h) * 3600 + parseFloat(m) * 60 + parseFloat(s);
+            };
+            sceneTimes.push({
+                start: toSeconds(startTime),
+                end: toSeconds(endTime)
+            });
+            idx++;
+        }
+    } catch (e) {
+        console.warn("   ⚠️ Could not parse VTT. Using evenly divided scene timing.");
+    }
 
-    // Concat file
-    let concatList = videoFiles.map(f => `file '${f}'\nduration ${clipDuration}`).join('\n');
+    // If VTT parsing failed or gave wrong count, fallback to even division
+    if (sceneTimes.length !== scenes.length) {
+        sceneTimes = scenes.map((_, i) => ({
+            start: (i / scenes.length) * audioDur,
+            end: ((i + 1) / scenes.length) * audioDur
+        }));
+    }
+
+    // Concat file for video clips
+    let concatList = videoFiles.map(f => `file '${f}'\nduration ${audioDur / scenes.length}`).join('\n');
     concatList += `\nfile '${videoFiles[videoFiles.length-1]}'`;
     fs.writeFileSync('inputs.txt', concatList);
 
     const fontPath = "./fonts/Anton.ttf";
     let filterComplex = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
 
-    // Load word boundaries from Edge TTS JSON
-    let boundaries;
-    try {
-        boundaries = JSON.parse(fs.readFileSync('boundaries.json', 'utf8'));
-    } catch (e) {
-        console.error("   ❌ Failed to parse boundaries.json. Using fallback timing.");
-        // Fallback: evenly spaced subtitles
-        const words = scenes.flatMap(s => s.text.split(' ').filter(w => w.length > 0));
-        const wordDur = audioDur / words.length;
-        boundaries = words.map((word, i) => ({
-            text: word,
-            offset: i * wordDur * 1e7, // Edge TTS uses 100-nanosecond units
-            duration: wordDur * 1e7
-        }));
-    }
-
-    // Convert boundaries to seconds and build drawtext filters
-    boundaries.forEach((item) => {
-        // Edge TTS word boundary format: { "text": "...", "offset": nanoseconds/100, "duration": ... }
-        const startSec = (item.offset || 0) / 1e7;
-        const endSec = startSec + (item.duration || 0) / 1e7;
-        const cleanWord = item.text.toUpperCase().replace(/[^A-Z0-9']/g, '');
-        if (!cleanWord) return;
-
-        filterComplex += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=180:x=(w-text_w)/2:y=(h-text_h)/2:borderw=8:bordercolor=black:enable='between(t,${startSec.toFixed(2)},${endSec.toFixed(2)})'`;
+    // For each scene, add drawtext filters for each word using character-weighted timing
+    scenes.forEach((scene, sIdx) => {
+        const words = scene.text.split(' ').filter(w => w.length > 0);
+        const totalChars = words.reduce((sum, w) => sum + w.length, 0);
+        const sceneStart = sceneTimes[sIdx].start;
+        const sceneEnd = sceneTimes[sIdx].end;
+        const sceneDuration = sceneEnd - sceneStart;
+        
+        let wordStart = sceneStart;
+        words.forEach(word => {
+            const cleanWord = word.toUpperCase().replace(/[^A-Z0-9']/g, '');
+            if (!cleanWord) return;
+            
+            // Word display time proportional to its length
+            const wordWeight = (word.length / totalChars) * sceneDuration * 0.9; // 90% of scene time for words, rest for pauses
+            const wordEnd = Math.min(wordStart + wordWeight, sceneEnd);
+            
+            filterComplex += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=180:x=(w-text_w)/2:y=(h-text_h)/2:borderw=8:bordercolor=black:enable='between(t,${wordStart.toFixed(2)},${wordEnd.toFixed(2)})'`;
+            
+            wordStart = wordEnd;
+        });
     });
 
     filterComplex += `[outv];`;
@@ -297,7 +325,7 @@ async function uploadToYouTube(videoPath, title, description) {
 // ========== MAIN ==========
 async function main() {
     try {
-        console.log("🛰️ GODZILLA V12.1 ACTIVATED (EDGE TTS WORD-PERFECT)");
+        console.log("🛰️ GODZILLA V13.0 ACTIVATED (CHARACTER-WEIGHTED SYNC)");
         const scenes = await getContent();
         const files = await processMedia(scenes);
         await generateVoiceover(scenes);
