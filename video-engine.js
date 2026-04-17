@@ -20,7 +20,7 @@ function robustJSONParse(text) {
 }
 
 /**
- * STEP 1: THE BRAIN (Now with Hardcoded CTA)
+ * STEP 1: THE BRAIN (Male Nigerian Mentor + CTA)
  */
 async function getContent() {
     console.log("🧠 Step 1: Generating Male Nigerian Mentor Script...");
@@ -30,14 +30,14 @@ async function getContent() {
                 model: "llama-3.1-8b-instant",
                 messages: [{ 
                     role: "system", 
-                    content: `You are a professional Male Nigerian Mentor. You speak in short, powerful insights. 
+                    content: `You are a Male Nigerian YouTube Mentor. 
                     RULES:
                     1. EXACTLY 30 scenes. 
-                    2. Each scene is 3-4 words max. 
-                    3. The very last scene MUST be: "Subscribe for more viral secrets!"
+                    2. Each scene is 3-4 words. 
+                    3. The last scene MUST BE: "Subscribe for more viral secrets!"
                     4. KEYWORDS: Physical high-end objects.
                     Return JSON: {"scenes": [{"text": "Scene text here", "keyword": "query"}]}` 
-                }, { role: "user", content: "Topic: YouTube Viral Secrets 2026" }],
+                }, { role: "user", content: "Topic: YouTube Success 2026" }],
                 response_format: { type: "json_object" }
             }, { headers: { 'Authorization': `Bearer ${key}` }, timeout: 30000 });
 
@@ -49,23 +49,19 @@ async function getContent() {
 }
 
 /**
- * STEP 2 & 3: MALE VOICE & SSML FIX
+ * STEP 2 & 3: MALE VOICE & SSML PAUSES
  */
 async function processMedia(scenes) {
-    console.log("🎙️ Step 2: Generating Abeo Voice with Precise SSML Pauses...");
-    
-    // Building the SSML with 500ms breaks between scenes for a natural teaching flow
+    console.log("🎙️ Step 2: Generating Abeo Voice with Hard Pauses...");
     let ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-NG">`;
-    scenes.forEach(s => {
-        ssml += `${s.text}<break time="500ms"/>`;
-    });
+    scenes.forEach(s => { ssml += `${s.text}<break time="600ms"/>`; }); // Increased pause for better teaching vibe
     ssml += `</speak>`;
     fs.writeFileSync('script.ssml', ssml);
 
-    // FIXED: Using -f instead of --ssml-file to solve the error in your screenshot
-    execSync(`edge-tts --voice en-NG-AbeoNeural --file script.ssml --write-media voice.mp3 --rate=-10%`);
+    // FIXED: Using -f flag for SSML compatibility
+    execSync(`edge-tts --voice en-NG-AbeoNeural -f script.ssml --write-media voice.mp3 --rate=-10%`);
 
-    console.log(`🎬 Step 3: Fetching 30 Portrait Clips...`);
+    console.log(`🎬 Step 3: Fetching Portrait Clips...`);
     const downloadClip = async (scene, i) => {
         let videoUrl = null;
         try {
@@ -94,10 +90,10 @@ async function processMedia(scenes) {
 }
 
 /**
- * STEP 4: PRECISION ASSEMBLY (Character-Weighted Subtitles)
+ * STEP 4: PRECISION ASSEMBLY (Unified Filtergraph Fix)
  */
 async function assembleVideo(scenes, videoFiles) {
-    console.log("✂️ Step 4: Final Assembly (Anton Font + Word-Weighting)...");
+    console.log("✂️ Step 4: Final Assembly (Anton Font + Fixed Audio Logic)...");
     
     const audioDur = parseFloat(execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`).toString());
     
@@ -107,7 +103,7 @@ async function assembleVideo(scenes, videoFiles) {
     fs.writeFileSync('inputs.txt', concatList);
 
     const fontPath = "./fonts/Anton.ttf";
-    let vFilter = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
+    let filterGraph = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
     
     let sceneStartTime = 0;
     const sceneDuration = audioDur / scenes.length;
@@ -118,29 +114,38 @@ async function assembleVideo(scenes, videoFiles) {
         let wordStartTime = sceneStartTime;
 
         words.forEach((word) => {
-            // Precision calculation: longer words stay on screen longer
-            const wordWeight = (word.length / totalChars) * (sceneDuration * 0.85); 
+            const wordWeight = (word.length / totalChars) * (sceneDuration * 0.80); 
             const wordEndTime = wordStartTime + wordWeight;
             const clean = word.toUpperCase().replace(/[^A-Z]/g, "");
 
             if (clean) {
-                vFilter += `,drawtext=fontfile='${fontPath}':text='${clean}':fontcolor=yellow:fontsize=180:x=(w-text_w)/2:y=(h-text_h)/2:borderw=15:bordercolor=black:enable='between(t,${wordStartTime.toFixed(2)},${wordEndTime.toFixed(2)})'`;
+                filterGraph += `,drawtext=fontfile='${fontPath}':text='${clean}':fontcolor=yellow:fontsize=180:x=(w-text_w)/2:y=(h-text_h)/2:borderw=25:bordercolor=black:enable='between(t,${wordStartTime.toFixed(2)},${wordEndTime.toFixed(2)})'`;
             }
             wordStartTime = wordEndTime;
         });
         sceneStartTime += sceneDuration;
     });
+    filterGraph += "[outv]";
 
-    fs.writeFileSync('filters.txt', vFilter + "[outv]");
+    let audioInputs = "-i voice.mp3";
+    let audioMap = "-map 1:a"; // Pass through voice only by default
 
-    let audioIn = "-i voice.mp3";
-    let aFilt = "[1:a]copy[aout]";
     if (fs.existsSync('background.mp3')) {
-        audioIn = "-i voice.mp3 -i background.mp3";
-        aFilt = "[2:a]volume=0.10,aloop=loop=-1:size=2e9[bg];[1:a][bg]amix=inputs=2:duration=first[aout]";
+        console.log("🎵 Mixing background music...");
+        audioInputs += " -i background.mp3";
+        // Unified audio filter: No 'copy' used. Correct amix logic.
+        filterGraph += ";[2:a]volume=0.12,aloop=loop=-1:size=2e9[bg];[1:a][bg]amix=inputs=2:duration=first[aout]";
+        audioMap = "-map '[aout]'";
     }
 
-    const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt ${audioIn} -filter_complex_script filters.txt -filter_complex "${aFilt}" -map "[outv]" -map "[aout]" -c:v libx264 -preset ultrafast -t ${audioDur} output.mp4`;
+    fs.writeFileSync('filters.txt', filterGraph);
+
+    // FIXED COMMAND: Only one filter complex, correctly mapped.
+    const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt ${audioInputs} \
+        -filter_complex_script filters.txt \
+        -map "[outv]" ${audioMap} \
+        -c:v libx264 -preset ultrafast -t ${audioDur} -c:a aac output.mp4`;
+    
     execSync(cmd, { stdio: 'inherit' });
 }
 
@@ -156,7 +161,7 @@ async function uploadToYouTube(fullScript) {
     await youtube.videos.insert({
         part: 'snippet,status',
         requestBody: {
-            snippet: { title: 'Viral Mentor Insights 2026 #Shorts', description: fullScript, categoryId: '27' },
+            snippet: { title: 'Viral Mentor Secrets 2026 #Shorts', description: fullScript, categoryId: '27' },
             status: { privacyStatus: 'public', selfDeclaredMadeForKids: false }
         },
         media: { body: fs.createReadStream('output.mp4') }
@@ -169,7 +174,7 @@ async function main() {
         const files = await processMedia(scenes);
         await assembleVideo(scenes, files);
         await uploadToYouTube(scenes.map(s => s.text).join(' '));
-        console.log("🏆 PROJECT SOVEREIGN: SUCCESSFUL DEPLOYMENT.");
-    } catch (e) { console.error("🔥 ERROR:", e.message); process.exit(1); }
+        console.log("🏆 PROJECT SOVEREIGN: DEPLOYED SUCCESSFULLY.");
+    } catch (e) { console.error("🔥 FATAL ERROR:", e.message); process.exit(1); }
 }
 main();
