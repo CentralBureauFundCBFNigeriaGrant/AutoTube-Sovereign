@@ -1,4 +1,4 @@
-name: AutoTube Sovereign v10.0
+name: AutoTube Sovereign v11.0 (Google TTS Godzilla)
 
 on:
   workflow_dispatch:
@@ -16,19 +16,23 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install System Engine & Anton Font
+      - name: Authenticate to Google Cloud
+        run: |
+          echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > $HOME/gcloud-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcloud-key.json" >> $GITHUB_ENV
+
+      - name: Install System Tools & Anton Font
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg libass-dev
-          pip3 install edge-tts
-          # Download Anton Font for that Hormozi Look
+          # Download Anton Font for Hormozi Look
           mkdir -p fonts
           wget -O fonts/Anton.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf
 
       - name: Install Dependencies
-        run: npm install axios googleapis
+        run: npm install
 
-      - name: Run AutoTube Engine
+      - name: Run AutoTube Sovereign Engine
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
@@ -37,4 +41,3 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         run: node sovereign.js
-        
