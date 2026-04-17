@@ -1,10 +1,10 @@
 // ===================================================================
-// 🛰️ AUTO-TUBE SOVEREIGN V13.1 - EDGE TTS RATE FIX
+// 🛰️ AUTO-TUBE SOVEREIGN V14.0 - UNBREAKABLE GODZILLA
 // ===================================================================
-// - Fixes Edge TTS "Invalid rate '0%'" error by omitting flag for default speed
-// - Uses VTT subtitles for scene timing + character-weighted word display
-// - Strict 20 scenes = 60 seconds
-// - 100% Free & Reliable
+// - Edge TTS with plain text (no newlines)
+// - FFmpeg atempo forces exactly 60 seconds
+// - Filter complex built in memory (no script file)
+// - Comprehensive error logging
 // ===================================================================
 
 const axios = require('axios');
@@ -25,7 +25,7 @@ const BACKUP_VIDEO = 'backup.mp4';
 const SCENE_COUNT = 20;
 const TTS_VOICE = 'en-NG-AbeoNeural';
 
-// ========== ROBUST JSON PARSE ==========
+// ========== HELPER: ROBUST JSON PARSE ==========
 function robustJSONParse(text) {
     try {
         const start = text.indexOf('{');
@@ -162,86 +162,93 @@ async function processMedia(scenes) {
     return scenes.map((_, i) => `clip_${i}.mp4`);
 }
 
-// ========== STEP 3: GENERATE VOICEOVER WITH EDGE TTS (RATE FIX) ==========
+// ========== STEP 3: GENERATE VOICEOVER + FORCE 60s WITH ATEMPO ==========
 async function generateVoiceover(scenes) {
-    console.log("🔊 Generating perfect 60s Nigerian Male voiceover with Edge TTS...");
+    console.log("🔊 Generating Nigerian Male voiceover with Edge TTS...");
 
-    const plainText = scenes.map(scene => scene.text).join('\n');
+    // Single line text (spaces only, no newlines)
+    const plainText = scenes.map(s => s.text).join(' ');
     fs.writeFileSync('script.txt', plainText);
-    console.log("   📝 Plain text script written.");
+    console.log(`   📝 Text length: ${plainText.length} chars`);
 
-    const synthesize = (ratePercent) => {
-        try { fs.unlinkSync('voice.mp3'); } catch (e) {}
-        try { fs.unlinkSync('subtitles.vtt'); } catch (e) {}
-        
-        // Build command: omit --rate if ratePercent is 0
-        let rateArg = '';
-        if (ratePercent !== 0) {
-            const sign = ratePercent > 0 ? '+' : '';
-            rateArg = `--rate=${sign}${ratePercent}%`;
-        }
-        const cmd = `edge-tts --voice ${TTS_VOICE} --file script.txt --write-media voice.mp3 ${rateArg} --write-subtitles subtitles.vtt`.trim();
-        console.log(`   🎙️ Running: ${cmd}`);
-        execSync(cmd, { stdio: 'pipe' });
-        const dur = parseFloat(execSync(
-            `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`
-        ).toString());
-        return dur;
-    };
+    // Synthesize with default rate
+    const cmd = `edge-tts --voice ${TTS_VOICE} --file script.txt --write-media raw_voice.mp3`;
+    console.log(`   🎙️ Running: ${cmd}`);
+    execSync(cmd, { stdio: 'pipe' });
 
-    let currentRate = 0;
-    let duration = synthesize(currentRate);
-    console.log(`   ⏱️ Initial duration (default rate): ${duration.toFixed(1)}s`);
+    // Get raw duration
+    const rawDur = parseFloat(execSync(
+        `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 raw_voice.mp3`
+    ).toString());
+    console.log(`   ⏱️ Raw duration: ${rawDur.toFixed(2)}s`);
 
-    if (duration < 55 || duration > 65) {
-        console.log("   🔁 Adjusting speaking rate to hit exactly 60s...");
-        const targetRate = Math.round((60 / duration - 1) * 100);
-        const adjustedRate = Math.min(100, Math.max(-50, targetRate));
-        console.log(`   🎚️ Trying rate: ${adjustedRate}%`);
-        duration = synthesize(adjustedRate);
-        console.log(`   ✅ New duration: ${duration.toFixed(1)}s`);
-        
-        if (duration < 55 || duration > 65) {
-            const fineTuneRate = Math.round(adjustedRate + (60 / duration - 1) * 100);
-            const finalRate = Math.min(100, Math.max(-50, fineTuneRate));
-            console.log(`   🎚️ Final rate: ${finalRate}%`);
-            duration = synthesize(finalRate);
-            console.log(`   ✅ Final duration: ${duration.toFixed(1)}s`);
-        }
+    // Force exactly 60 seconds using atempo (audio tempo filter)
+    // atempo only accepts values between 0.5 and 2.0, so we chain if needed
+    const tempo = rawDur / TARGET_DURATION;
+    console.log(`   🎚️ Required tempo adjustment: ${tempo.toFixed(3)}x`);
+
+    let atempoFilter = '';
+    let remainingTempo = tempo;
+    while (remainingTempo > 2.0) {
+        atempoFilter += `atempo=2.0,`;
+        remainingTempo /= 2.0;
     }
-    
-    console.log(`   🔈 Voiceover ready. VTT subtitles saved.`);
+    while (remainingTempo < 0.5) {
+        atempoFilter += `atempo=0.5,`;
+        remainingTempo /= 0.5;
+    }
+    atempoFilter += `atempo=${remainingTempo.toFixed(3)}`;
+
+    const ffmpegTempoCmd = `ffmpeg -y -i raw_voice.mp3 -filter:a "${atempoFilter}" -vn voice.mp3`;
+    console.log(`   🔧 Adjusting tempo: ${ffmpegTempoCmd}`);
+    execSync(ffmpegTempoCmd, { stdio: 'pipe' });
+
+    const finalDur = parseFloat(execSync(
+        `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`
+    ).toString());
+    console.log(`   ✅ Final voiceover duration: ${finalDur.toFixed(2)}s`);
+
+    // Also generate subtitles VTT for rough timing (we'll use scene-based timing later)
+    execSync(`edge-tts --voice ${TTS_VOICE} --file script.txt --write-subtitles subtitles.vtt`, { stdio: 'pipe' });
 }
 
 // ========== STEP 4: ASSEMBLE VIDEO WITH CHARACTER-WEIGHTED SUBTITLES ==========
 async function assembleVideo(scenes, videoFiles) {
-    console.log("🎞️ Assembling final video with character-weighted subtitles...");
+    console.log("🎞️ Assembling final video...");
 
     const audioPath = 'voice.mp3';
     const bgMusicPath = 'bg.mp3';
     const audioDur = parseFloat(execSync(
         `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ${audioPath}`
     ).toString());
-    
+    const clipDuration = audioDur / scenes.length;
+
+    // Build concat file
+    let concatList = videoFiles.map(f => `file '${f}'\nduration ${clipDuration}`).join('\n');
+    concatList += `\nfile '${videoFiles[videoFiles.length-1]}'`;
+    fs.writeFileSync('inputs.txt', concatList);
+
+    // Build filter complex in memory
+    const fontPath = "./fonts/Anton.ttf";
+    let filterComplex = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
+
+    // Get scene timings from VTT (or fallback to even split)
     let sceneTimes = [];
     try {
-        const vttContent = fs.readFileSync('subtitles.vtt', 'utf8');
-        const cueRegex = /(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})\n([\s\S]*?)(?=\n\n|\n*$)/g;
-        let match;
-        let idx = 0;
-        while ((match = cueRegex.exec(vttContent)) !== null && idx < scenes.length) {
-            const toSeconds = (t) => {
-                const [h, m, s] = t.split(':');
-                return parseFloat(h) * 3600 + parseFloat(m) * 60 + parseFloat(s);
-            };
-            sceneTimes.push({
-                start: toSeconds(match[1]),
-                end: toSeconds(match[2])
-            });
-            idx++;
+        const vtt = fs.readFileSync('subtitles.vtt', 'utf8');
+        const lines = vtt.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].includes('-->')) {
+                const times = lines[i].split(' --> ');
+                const toSec = (t) => {
+                    const parts = t.split(':');
+                    return parseFloat(parts[0])*3600 + parseFloat(parts[1])*60 + parseFloat(parts[2]);
+                };
+                sceneTimes.push({ start: toSec(times[0]), end: toSec(times[1]) });
+            }
         }
     } catch (e) {
-        console.warn("   ⚠️ VTT parsing failed. Using evenly divided timing.");
+        console.warn("   ⚠️ VTT parsing failed, using even scene division.");
     }
 
     if (sceneTimes.length !== scenes.length) {
@@ -251,13 +258,7 @@ async function assembleVideo(scenes, videoFiles) {
         }));
     }
 
-    let concatList = videoFiles.map(f => `file '${f}'\nduration ${audioDur / scenes.length}`).join('\n');
-    concatList += `\nfile '${videoFiles[videoFiles.length-1]}'`;
-    fs.writeFileSync('inputs.txt', concatList);
-
-    const fontPath = "./fonts/Anton.ttf";
-    let filterComplex = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
-
+    // Add drawtext filters for each word
     scenes.forEach((scene, sIdx) => {
         const words = scene.text.split(' ').filter(w => w.length > 0);
         const totalChars = words.reduce((sum, w) => sum + w.length, 0);
@@ -279,19 +280,28 @@ async function assembleVideo(scenes, videoFiles) {
         });
     });
 
-    filterComplex += `[outv];`;
+    filterComplex += `[outv]`;
 
+    // Build audio mixing part
     let audioInputs = "-i voice.mp3";
     let audioMap = "-map 1:a";
     if (fs.existsSync(bgMusicPath)) {
         audioInputs += " -i bg.mp3";
-        filterComplex += `[2:a]volume=0.10,aloop=loop=-1:size=2e9[bg];[1:a][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]`;
+        filterComplex += `;[2:a]volume=0.10,aloop=loop=-1:size=2e9[bg];[1:a][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]`;
         audioMap = "-map '[aout]'";
     }
 
-    fs.writeFileSync('filters.txt', filterComplex);
-    const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt ${audioInputs} -filter_complex_script filters.txt -map "[outv]" ${audioMap} -c:v libx264 -preset fast -crf 22 -t ${audioDur} -c:a aac -b:a 128k -movflags +faststart -shortest output.mp4`;
-    execSync(cmd, { stdio: 'inherit' });
+    // Final FFmpeg command with filter_complex passed directly (no script file)
+    const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt ${audioInputs} -filter_complex "${filterComplex}" -map "[outv]" ${audioMap} -c:v libx264 -preset fast -crf 22 -t ${audioDur} -c:a aac -b:a 128k -movflags +faststart -shortest output.mp4`;
+    console.log("   🔨 Encoding video...");
+    try {
+        execSync(cmd, { stdio: 'inherit' });
+    } catch (e) {
+        console.error("   ❌ FFmpeg failed. Dumping filter complex for debugging:");
+        fs.writeFileSync('filter_debug.txt', filterComplex);
+        console.error("   📄 Filter complex saved to filter_debug.txt");
+        throw e;
+    }
     console.log(`✅ Video ready: output.mp4 (${Math.round(audioDur)} seconds)`);
 }
 
@@ -316,7 +326,7 @@ async function uploadToYouTube(videoPath, title, description) {
 // ========== MAIN ==========
 async function main() {
     try {
-        console.log("🛰️ GODZILLA V13.1 ACTIVATED (RATE FIX)");
+        console.log("🛰️ GODZILLA V14.0 ACTIVATED (UNBREAKABLE)");
         const scenes = await getContent();
         const files = await processMedia(scenes);
         await generateVoiceover(scenes);
