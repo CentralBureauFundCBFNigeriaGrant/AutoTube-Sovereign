@@ -1,10 +1,10 @@
 // ===================================================================
-// 🛰️ AUTO-TUBE SOVEREIGN V14.2 - FINAL GODZILLA (FONTFILE FIX)
+// 🛰️ AUTO-TUBE SOVEREIGN V15.0 - SPEED DEMON EDITION
 // ===================================================================
-// - Fixes missing fontfile in drawtext filters
-// - Consistent map quoting
-// - Full FFmpeg error logging
-// - Fallback to scene subtitles if word-level fails
+// - Edge TTS with +25% speaking rate (confident, fast mentor)
+// - Audio forced to exactly 60s via atempo
+// - Word-level subtitles with fallback
+// - Ready for automation and scaling
 // ===================================================================
 
 const axios = require('axios');
@@ -24,8 +24,9 @@ const TARGET_DURATION = 60;
 const BACKUP_VIDEO = 'backup.mp4';
 const SCENE_COUNT = 20;
 const TTS_VOICE = 'en-NG-AbeoNeural';
+const DEFAULT_RATE = 25; // +25% faster speaking rate (confident mentor)
 
-// ========== HELPER: ROBUST JSON PARSE ==========
+// ========== ROBUST JSON PARSE ==========
 function robustJSONParse(text) {
     try {
         const start = text.indexOf('{');
@@ -162,7 +163,7 @@ async function processMedia(scenes) {
     return scenes.map((_, i) => `clip_${i}.mp4`);
 }
 
-// ========== STEP 3: GENERATE VOICEOVER + FORCE 60s ==========
+// ========== STEP 3: GENERATE VOICEOVER WITH FASTER DEFAULT RATE ==========
 async function generateVoiceover(scenes) {
     console.log("🔊 Generating Nigerian Male voiceover with Edge TTS...");
 
@@ -170,17 +171,20 @@ async function generateVoiceover(scenes) {
     fs.writeFileSync('script.txt', plainText);
     console.log(`   📝 Text length: ${plainText.length} chars`);
 
-    const cmd = `edge-tts --voice ${TTS_VOICE} --file script.txt --write-media raw_voice.mp3`;
+    // Use default fast rate
+    const rateArg = `+${DEFAULT_RATE}%`;
+    const cmd = `edge-tts --voice ${TTS_VOICE} --file script.txt --write-media raw_voice.mp3 --rate=${rateArg}`;
     console.log(`   🎙️ Running: ${cmd}`);
     execSync(cmd, { stdio: 'pipe' });
 
     const rawDur = parseFloat(execSync(
         `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 raw_voice.mp3`
     ).toString());
-    console.log(`   ⏱️ Raw duration: ${rawDur.toFixed(2)}s`);
+    console.log(`   ⏱️ Raw duration (at +${DEFAULT_RATE}%): ${rawDur.toFixed(2)}s`);
 
+    // Force exactly 60s using atempo
     const tempo = rawDur / TARGET_DURATION;
-    console.log(`   🎚️ Required tempo: ${tempo.toFixed(3)}x`);
+    console.log(`   🎚️ Tempo adjustment needed: ${tempo.toFixed(3)}x`);
 
     let atempoFilter = '';
     let remaining = tempo;
@@ -195,13 +199,13 @@ async function generateVoiceover(scenes) {
     const finalDur = parseFloat(execSync(
         `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`
     ).toString());
-    console.log(`   ✅ Final duration: ${finalDur.toFixed(2)}s`);
+    console.log(`   ✅ Final voiceover duration: ${finalDur.toFixed(2)}s`);
 
-    // Generate VTT for scene timing
-    execSync(`edge-tts --voice ${TTS_VOICE} --file script.txt --write-subtitles subtitles.vtt`, { stdio: 'pipe' });
+    // Generate VTT for scene timing (at the fast rate)
+    execSync(`edge-tts --voice ${TTS_VOICE} --file script.txt --write-subtitles subtitles.vtt --rate=${rateArg}`, { stdio: 'pipe' });
 }
 
-// ========== STEP 4: ASSEMBLE VIDEO (WITH FALLBACK) ==========
+// ========== STEP 4: ASSEMBLE VIDEO ==========
 async function assembleVideo(scenes, videoFiles) {
     console.log("🎞️ Assembling final video...");
 
@@ -242,7 +246,7 @@ async function assembleVideo(scenes, videoFiles) {
         }));
     }
 
-    // Build filter graph (word-level with strict empty-word check)
+    // Build filter graph
     const fontPath = "./fonts/Anton.ttf";
     let filterComplex = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
 
@@ -256,12 +260,11 @@ async function assembleVideo(scenes, videoFiles) {
         let wordStart = sceneStart;
         words.forEach(word => {
             const cleanWord = word.toUpperCase().replace(/[^A-Z0-9']/g, '');
-            if (!cleanWord) return; // skip empty words
+            if (!cleanWord) return;
             
             const wordWeight = (word.length / totalChars) * sceneDuration * 0.9;
             const wordEnd = Math.min(wordStart + wordWeight, sceneEnd);
             
-            // Ensure fontfile is always included
             filterComplex += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=180:x=(w-text_w)/2:y=(h-text_h)/2:borderw=8:bordercolor=black:enable='between(t,${wordStart.toFixed(2)},${wordEnd.toFixed(2)})'`;
             wordStart = wordEnd;
         });
@@ -269,7 +272,6 @@ async function assembleVideo(scenes, videoFiles) {
 
     filterComplex += `[outv]`;
 
-    // Audio mixing
     let audioInputs = "-i voice.mp3";
     let audioMap = "-map 1:a";
     if (fs.existsSync(bgMusicPath)) {
@@ -278,24 +280,14 @@ async function assembleVideo(scenes, videoFiles) {
         audioMap = "-map '[aout]'";
     }
 
-    // Write filter complex to file
     fs.writeFileSync('filters.txt', filterComplex);
-    console.log("   📄 Filter script written to filters.txt");
-
-    // Build FFmpeg command
     const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt ${audioInputs} -filter_complex_script filters.txt -map "[outv]" ${audioMap} -c:v libx264 -preset fast -crf 22 -t ${audioDur} -c:a aac -b:a 128k -movflags +faststart -shortest output.mp4`;
     console.log("   🔨 Encoding video...");
     try {
-        execSync(cmd, { stdio: 'pipe' }); // capture output to avoid huge logs
+        execSync(cmd, { stdio: 'pipe' });
         console.log("   ✅ FFmpeg completed.");
     } catch (e) {
-        console.error("   ❌ FFmpeg failed. Stderr:");
-        console.error(e.stderr ? e.stderr.toString() : 'No stderr captured');
-        console.error("   📄 Filter content (first 500 chars):");
-        console.error(filterComplex.substring(0, 500));
-        
-        // Fallback: simpler scene-based subtitles
-        console.log("   🔄 Falling back to scene-based subtitles...");
+        console.error("   ❌ FFmpeg failed. Falling back to scene subtitles...");
         filterComplex = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
         scenes.forEach((scene, sIdx) => {
             const cleanText = scene.text.toUpperCase().replace(/[^A-Z0-9\s]/g, '');
@@ -336,7 +328,7 @@ async function uploadToYouTube(videoPath, title, description) {
 // ========== MAIN ==========
 async function main() {
     try {
-        console.log("🛰️ GODZILLA V14.2 ACTIVATED (FONTFILE FIX + FALLBACK)");
+        console.log("🛰️ GODZILLA V15.0 ACTIVATED (SPEED DEMON +25%)");
         const scenes = await getContent();
         const files = await processMedia(scenes);
         await generateVoiceover(scenes);
