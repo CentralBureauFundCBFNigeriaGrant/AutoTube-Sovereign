@@ -1,11 +1,10 @@
 // ===================================================================
-// 🛰️ AUTO-TUBE SOVEREIGN V13.0 - EDGE TTS CHARACTER-WEIGHTED GODZILLA
+// 🛰️ AUTO-TUBE SOVEREIGN V13.1 - EDGE TTS RATE FIX
 // ===================================================================
-// - Uses Edge TTS with VTT subtitles for scene timing
-// - Character-weighted word timing for natural subtitle flow
-// - No Google Cloud / Aeneas / Extra Python required
+// - Fixes Edge TTS "Invalid rate '0%'" error by omitting flag for default speed
+// - Uses VTT subtitles for scene timing + character-weighted word display
 // - Strict 20 scenes = 60 seconds
-// - 100% Free & Reliable on GitHub Actions
+// - 100% Free & Reliable
 // ===================================================================
 
 const axios = require('axios');
@@ -24,7 +23,7 @@ const YT_REFRESH_TOKEN = process.env.YT_REFRESH_TOKEN;
 const TARGET_DURATION = 60;
 const BACKUP_VIDEO = 'backup.mp4';
 const SCENE_COUNT = 20;
-const TTS_VOICE = 'en-NG-AbeoNeural'; // Nigerian Male Voice
+const TTS_VOICE = 'en-NG-AbeoNeural';
 
 // ========== ROBUST JSON PARSE ==========
 function robustJSONParse(text) {
@@ -119,7 +118,6 @@ async function downloadClip(scene, index) {
         });
     };
 
-    // Pexels
     if (PEXELS_KEY) {
         try {
             const res = await axios.get('https://api.pexels.com/videos/search', {
@@ -136,7 +134,6 @@ async function downloadClip(scene, index) {
         } catch (e) {}
     }
 
-    // Pixabay
     if (PIXABAY_KEY) {
         try {
             const res = await axios.get('https://pixabay.com/api/videos/', {
@@ -152,7 +149,6 @@ async function downloadClip(scene, index) {
         } catch (e) {}
     }
 
-    // Fallback
     console.log(`   ⚠️ Clip ${index}: Using backup.mp4`);
     fs.copyFileSync(BACKUP_VIDEO, filename);
 }
@@ -166,21 +162,26 @@ async function processMedia(scenes) {
     return scenes.map((_, i) => `clip_${i}.mp4`);
 }
 
-// ========== STEP 3: GENERATE VOICEOVER + SCENE TIMINGS WITH EDGE TTS ==========
+// ========== STEP 3: GENERATE VOICEOVER WITH EDGE TTS (RATE FIX) ==========
 async function generateVoiceover(scenes) {
     console.log("🔊 Generating perfect 60s Nigerian Male voiceover with Edge TTS...");
 
-    // Plain text with newlines for natural pauses
     const plainText = scenes.map(scene => scene.text).join('\n');
     fs.writeFileSync('script.txt', plainText);
     console.log("   📝 Plain text script written.");
 
-    // Helper to synthesize with a specific rate and capture VTT subtitles
     const synthesize = (ratePercent) => {
         try { fs.unlinkSync('voice.mp3'); } catch (e) {}
         try { fs.unlinkSync('subtitles.vtt'); } catch (e) {}
-        const rateArg = `${ratePercent > 0 ? '+' : ''}${ratePercent}%`;
-        const cmd = `edge-tts --voice ${TTS_VOICE} --file script.txt --write-media voice.mp3 --rate=${rateArg} --write-subtitles subtitles.vtt`;
+        
+        // Build command: omit --rate if ratePercent is 0
+        let rateArg = '';
+        if (ratePercent !== 0) {
+            const sign = ratePercent > 0 ? '+' : '';
+            rateArg = `--rate=${sign}${ratePercent}%`;
+        }
+        const cmd = `edge-tts --voice ${TTS_VOICE} --file script.txt --write-media voice.mp3 ${rateArg} --write-subtitles subtitles.vtt`.trim();
+        console.log(`   🎙️ Running: ${cmd}`);
         execSync(cmd, { stdio: 'pipe' });
         const dur = parseFloat(execSync(
             `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`
@@ -188,10 +189,9 @@ async function generateVoiceover(scenes) {
         return dur;
     };
 
-    // Iterate to hit exactly 60 seconds
     let currentRate = 0;
     let duration = synthesize(currentRate);
-    console.log(`   ⏱️ Initial duration (${currentRate}% rate): ${duration.toFixed(1)}s`);
+    console.log(`   ⏱️ Initial duration (default rate): ${duration.toFixed(1)}s`);
 
     if (duration < 55 || duration > 65) {
         console.log("   🔁 Adjusting speaking rate to hit exactly 60s...");
@@ -201,7 +201,6 @@ async function generateVoiceover(scenes) {
         duration = synthesize(adjustedRate);
         console.log(`   ✅ New duration: ${duration.toFixed(1)}s`);
         
-        // Fine-tune if still off
         if (duration < 55 || duration > 65) {
             const fineTuneRate = Math.round(adjustedRate + (60 / duration - 1) * 100);
             const finalRate = Math.min(100, Math.max(-50, fineTuneRate));
@@ -214,9 +213,9 @@ async function generateVoiceover(scenes) {
     console.log(`   🔈 Voiceover ready. VTT subtitles saved.`);
 }
 
-// ========== STEP 4: ASSEMBLE VIDEO WITH CHARACTER-WEIGHTED WORD SUBTITLES ==========
+// ========== STEP 4: ASSEMBLE VIDEO WITH CHARACTER-WEIGHTED SUBTITLES ==========
 async function assembleVideo(scenes, videoFiles) {
-    console.log("🎞️ Assembling final video with character-weighted word subtitles...");
+    console.log("🎞️ Assembling final video with character-weighted subtitles...");
 
     const audioPath = 'voice.mp3';
     const bgMusicPath = 'bg.mp3';
@@ -224,7 +223,6 @@ async function assembleVideo(scenes, videoFiles) {
         `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ${audioPath}`
     ).toString());
     
-    // Parse VTT to get scene start/end times
     let sceneTimes = [];
     try {
         const vttContent = fs.readFileSync('subtitles.vtt', 'utf8');
@@ -232,24 +230,20 @@ async function assembleVideo(scenes, videoFiles) {
         let match;
         let idx = 0;
         while ((match = cueRegex.exec(vttContent)) !== null && idx < scenes.length) {
-            const startTime = match[1];
-            const endTime = match[2];
-            // Convert timestamp to seconds
             const toSeconds = (t) => {
                 const [h, m, s] = t.split(':');
                 return parseFloat(h) * 3600 + parseFloat(m) * 60 + parseFloat(s);
             };
             sceneTimes.push({
-                start: toSeconds(startTime),
-                end: toSeconds(endTime)
+                start: toSeconds(match[1]),
+                end: toSeconds(match[2])
             });
             idx++;
         }
     } catch (e) {
-        console.warn("   ⚠️ Could not parse VTT. Using evenly divided scene timing.");
+        console.warn("   ⚠️ VTT parsing failed. Using evenly divided timing.");
     }
 
-    // If VTT parsing failed or gave wrong count, fallback to even division
     if (sceneTimes.length !== scenes.length) {
         sceneTimes = scenes.map((_, i) => ({
             start: (i / scenes.length) * audioDur,
@@ -257,7 +251,6 @@ async function assembleVideo(scenes, videoFiles) {
         }));
     }
 
-    // Concat file for video clips
     let concatList = videoFiles.map(f => `file '${f}'\nduration ${audioDur / scenes.length}`).join('\n');
     concatList += `\nfile '${videoFiles[videoFiles.length-1]}'`;
     fs.writeFileSync('inputs.txt', concatList);
@@ -265,7 +258,6 @@ async function assembleVideo(scenes, videoFiles) {
     const fontPath = "./fonts/Anton.ttf";
     let filterComplex = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
 
-    // For each scene, add drawtext filters for each word using character-weighted timing
     scenes.forEach((scene, sIdx) => {
         const words = scene.text.split(' ').filter(w => w.length > 0);
         const totalChars = words.reduce((sum, w) => sum + w.length, 0);
@@ -278,8 +270,7 @@ async function assembleVideo(scenes, videoFiles) {
             const cleanWord = word.toUpperCase().replace(/[^A-Z0-9']/g, '');
             if (!cleanWord) return;
             
-            // Word display time proportional to its length
-            const wordWeight = (word.length / totalChars) * sceneDuration * 0.9; // 90% of scene time for words, rest for pauses
+            const wordWeight = (word.length / totalChars) * sceneDuration * 0.9;
             const wordEnd = Math.min(wordStart + wordWeight, sceneEnd);
             
             filterComplex += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=180:x=(w-text_w)/2:y=(h-text_h)/2:borderw=8:bordercolor=black:enable='between(t,${wordStart.toFixed(2)},${wordEnd.toFixed(2)})'`;
@@ -325,7 +316,7 @@ async function uploadToYouTube(videoPath, title, description) {
 // ========== MAIN ==========
 async function main() {
     try {
-        console.log("🛰️ GODZILLA V13.0 ACTIVATED (CHARACTER-WEIGHTED SYNC)");
+        console.log("🛰️ GODZILLA V13.1 ACTIVATED (RATE FIX)");
         const scenes = await getContent();
         const files = await processMedia(scenes);
         await generateVoiceover(scenes);
