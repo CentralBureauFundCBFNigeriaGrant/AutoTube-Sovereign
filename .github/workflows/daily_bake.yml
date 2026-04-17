@@ -1,4 +1,4 @@
-name: AutoTube Sovereign v11.1 (Google TTS Godzilla)
+name: AutoTube Sovereign v12.0 (Edge TTS Godzilla)
 
 on:
   workflow_dispatch:
@@ -16,23 +16,15 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Authenticate to Google Cloud
-        run: |
-          echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > $HOME/gcloud-key.json
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcloud-key.json" >> $GITHUB_ENV
-
-      - name: Install System Tools & Anton Font
+      - name: Install System Tools, Anton Font, and Aeneas
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg libass-dev
+          sudo apt-get install -y ffmpeg libass-dev python3 python3-pip espeak-ng libespeak-ng-dev
+          pip3 install edge-tts
+          pip3 install aeneas
+          # Download Anton Font for Hormozi Look
           mkdir -p fonts
           wget -O fonts/Anton.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf
-
-      - name: Download Background Music (Optional)
-        run: |
-          # If bg.mp3 is not in your repo, uncomment the next line to download a free track
-          # wget -O bg.mp3 "https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a74b91.mp3"
-          echo "Skipping background music download (assuming bg.mp3 exists in repo)."
 
       - name: Install Dependencies
         run: npm install
@@ -45,5 +37,4 @@ jobs:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
         run: node sovereign.js
