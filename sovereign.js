@@ -153,24 +153,27 @@ async function processMedia(scenes) {
     return scenes.map((_, i) => `clip_${i}.mp4`);
 }
 
-// ========== VOICEOVER (ABEO WITH SSML) ==========
+// Replace generateVoiceover with this Edge‑TTS variant
 async function generateVoiceover(scenes) {
     console.log("🔊 Generating Abeo voiceover...");
-    let ssmlBody = scenes.map((s, i) => 
-        i < scenes.length - 1 ? `${s.text} <break time="400ms"/>` : s.text
-    ).join(' ');
-    const fullSSML = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-NG"><voice name="en-NG-AbeoNeural">${ssmlBody}</voice></speak>`;
-    fs.writeFileSync('script.ssml', fullSSML);
+    const plainText = scenes.map(s => s.text).join(' ');
+    fs.writeFileSync('script.txt', plainText);
     
-    execSync(`edge-tts --file script.ssml --write-media voice.mp3 --rate=-8%`, { stdio: 'pipe' });
+    // Use explicit voice and rate; avoid SSML
+    execSync(`edge-tts --voice en-NG-AbeoNeural --file script.txt --write-media voice.mp3 --rate=+5%`, { stdio: 'pipe' });
+    
     const dur = parseFloat(execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`).toString());
     console.log(`   ⏱️ Voice duration: ${dur.toFixed(1)}s`);
     
-    // Adjust to hit 60s target
+    // Adjust rate to hit 60s
     if (dur < 55 || dur > 65) {
-        const newRate = Math.round(-8 + (60 - dur) * 1.5);
-        execSync(`edge-tts --file script.ssml --write-media voice.mp3 --rate=${newRate}%`, { stdio: 'pipe' });
+        const targetRate = Math.round((60 / dur - 1) * 100);
+        execSync(`edge-tts --voice en-NG-AbeoNeural --file script.txt --write-media voice.mp3 --rate=${targetRate}%`, { stdio: 'pipe' });
     }
+    
+    // Generate subtitles using aeneas (you'd need to install python and aeneas)
+    // Or use a simpler approach: divide audio equally among words.
+    // For perfection, I recommend Google TTS.
 }
 
 // ========== ASSEMBLE VIDEO WITH PERFECT SUBTITLE SYNC ==========
