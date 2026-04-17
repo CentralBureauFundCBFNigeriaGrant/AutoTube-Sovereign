@@ -117,7 +117,7 @@ async function assembleVideo(scenes, videoFiles) {
             const clean = word.toUpperCase().replace(/[^A-Z]/g, "");
 
             if (clean) {
-                vFilter += `,drawtext=fontfile='${fontPath}':text='${clean}':fontcolor=yellow:fontsize=180:x=(w-text_w)/2:y=(h-text_h)/2:borderw=25:bordercolor=black:enable='between(t,${wordStartTime.toFixed(2)},${wordEndTime.toFixed(2)})'`;
+                vFilter += `,drawtext=fontfile='${fontPath}':text='${clean}':fontcolor=yellow:fontsize=180:x=(w-text_w)/2:y=(h-text_h)/2:borderw=15:bordercolor=black:enable='between(t,${wordStartTime.toFixed(2)},${wordEndTime.toFixed(2)})'`;
             }
             wordStartTime = wordEndTime;
         });
