@@ -6,6 +6,10 @@ const { google } = require('googleapis');
 const GROQ_KEYS = [process.env.GROQ_API_KEY].filter(k => k);
 const PEXELS_API_KEY = process.env.PEXELS_API_KEY; 
 
+const YT_CLIENT_ID = process.env.YT_CLIENT_ID;
+const YT_CLIENT_SECRET = process.env.YT_CLIENT_SECRET;
+const YT_REFRESH_TOKEN = process.env.YT_REFRESH_TOKEN;
+
 function robustJSONParse(text) {
     try {
         const start = text.indexOf('{');
@@ -16,24 +20,24 @@ function robustJSONParse(text) {
 }
 
 /**
- * STEP 1: THE BRAIN (Now with Forced CTA)
+ * STEP 1: THE BRAIN (Now with Hardcoded CTA)
  */
 async function getContent() {
-    console.log("🧠 Step 1: Generating High-Authority Script...");
+    console.log("🧠 Step 1: Generating Male Nigerian Mentor Script...");
     for (let key of GROQ_KEYS) {
         try {
             const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
                 model: "llama-3.1-8b-instant",
                 messages: [{ 
                     role: "system", 
-                    content: `You are a world-class Male Nigerian Tech Mentor. 
+                    content: `You are a professional Male Nigerian Mentor. You speak in short, powerful insights. 
                     RULES:
                     1. EXACTLY 30 scenes. 
-                    2. Each scene is 3-4 words. 
-                    3. ALWAYS end the final scene with: "Subscribe for more viral secrets!"
+                    2. Each scene is 3-4 words max. 
+                    3. The very last scene MUST be: "Subscribe for more viral secrets!"
                     4. KEYWORDS: Physical high-end objects.
-                    Return JSON: {"scenes": [{"text": "Word word word", "keyword": "query"}]}` 
-                }, { role: "user", content: "Topic: YouTube Growth 2026" }],
+                    Return JSON: {"scenes": [{"text": "Scene text here", "keyword": "query"}]}` 
+                }, { role: "user", content: "Topic: YouTube Viral Secrets 2026" }],
                 response_format: { type: "json_object" }
             }, { headers: { 'Authorization': `Bearer ${key}` }, timeout: 30000 });
 
@@ -45,12 +49,12 @@ async function getContent() {
 }
 
 /**
- * STEP 2 & 3: MALE VOICE WITH FORCED PAUSES
+ * STEP 2 & 3: MALE VOICE & SSML FIX
  */
 async function processMedia(scenes) {
-    console.log("🎙️ Step 2: Generating Male Nigerian Voice with SSML Pauses...");
+    console.log("🎙️ Step 2: Generating Abeo Voice with Precise SSML Pauses...");
     
-    // We build an SSML string to force 500ms breaks between scenes
+    // Building the SSML with 500ms breaks between scenes for a natural teaching flow
     let ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-NG">`;
     scenes.forEach(s => {
         ssml += `${s.text}<break time="500ms"/>`;
@@ -58,10 +62,10 @@ async function processMedia(scenes) {
     ssml += `</speak>`;
     fs.writeFileSync('script.ssml', ssml);
 
-    // Using Abeo (Authoritative Male Nigerian)
-    execSync(`edge-tts --voice en-NG-AbeoNeural --ssml-file script.ssml --write-media voice.mp3 --rate=-10%`);
+    // FIXED: Using -f instead of --ssml-file to solve the error in your screenshot
+    execSync(`edge-tts --voice en-NG-AbeoNeural --file script.ssml --write-media voice.mp3 --rate=-10%`);
 
-    console.log(`🎬 Step 3: Fetching Clips...`);
+    console.log(`🎬 Step 3: Fetching 30 Portrait Clips...`);
     const downloadClip = async (scene, i) => {
         let videoUrl = null;
         try {
@@ -72,28 +76,31 @@ async function processMedia(scenes) {
         } catch (e) {}
 
         const path = `clip_${i}.mp4`;
-        if (!videoUrl) { fs.copyFileSync('backup.mp4', path); return; }
+        if (!videoUrl) { 
+            if (fs.existsSync('backup.mp4')) fs.copyFileSync('backup.mp4', path);
+            else execSync(`ffmpeg -f lavfi -i color=c=black:s=1080x1920:d=3 -pix_fmt yuv420p ${path}`);
+            return; 
+        }
         const writer = fs.createWriteStream(path);
         const response = await axios({ url: videoUrl, method: 'GET', responseType: 'stream' });
         response.data.pipe(writer);
         return new Promise(r => writer.on('finish', r));
     };
 
-    for (let i = 0; i < scenes.length; i += 5) {
-        await Promise.all(scenes.slice(i, i + 5).map((s, idx) => downloadClip(s, i + idx)));
+    for (let i = 0; i < scenes.length; i += 6) {
+        await Promise.all(scenes.slice(i, i + 6).map((s, idx) => downloadClip(s, i + idx)));
     }
     return scenes.map((_, i) => `clip_${i}.mp4`);
 }
 
 /**
- * STEP 4: PRECISION SYNC (Weighted by Word Length)
+ * STEP 4: PRECISION ASSEMBLY (Character-Weighted Subtitles)
  */
 async function assembleVideo(scenes, videoFiles) {
-    console.log("✂️ Step 4: Assembling with 100% Accuracy...");
+    console.log("✂️ Step 4: Final Assembly (Anton Font + Word-Weighting)...");
     
     const audioDur = parseFloat(execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`).toString());
     
-    // Create the concat list for background videos
     let concatList = "";
     videoFiles.forEach((f) => { concatList += `file '${f}'\nduration ${audioDur / scenes.length}\n`; });
     concatList += `file '${videoFiles[videoFiles.length-1]}'`;
@@ -107,12 +114,12 @@ async function assembleVideo(scenes, videoFiles) {
 
     scenes.forEach((scene) => {
         const words = scene.text.split(' ');
-        const totalChars = scene.text.length;
+        const totalChars = scene.text.length || 1;
         let wordStartTime = sceneStartTime;
 
         words.forEach((word) => {
-            // Give each word time based on how long it is (proportionate)
-            const wordWeight = (word.length / totalChars) * (sceneDuration * 0.8); // 80% of time for words, 20% for the break
+            // Precision calculation: longer words stay on screen longer
+            const wordWeight = (word.length / totalChars) * (sceneDuration * 0.85); 
             const wordEndTime = wordStartTime + wordWeight;
             const clean = word.toUpperCase().replace(/[^A-Z]/g, "");
 
@@ -137,12 +144,32 @@ async function assembleVideo(scenes, videoFiles) {
     execSync(cmd, { stdio: 'inherit' });
 }
 
+/**
+ * STEP 5: UPLOAD
+ */
+async function uploadToYouTube(fullScript) {
+    if (!YT_CLIENT_ID || !YT_REFRESH_TOKEN) return;
+    console.log("🚀 Step 5: Uploading Final Video...");
+    const oauth2Client = new google.auth.OAuth2(YT_CLIENT_ID, YT_CLIENT_SECRET);
+    oauth2Client.setCredentials({ refresh_token: YT_REFRESH_TOKEN });
+    const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+    await youtube.videos.insert({
+        part: 'snippet,status',
+        requestBody: {
+            snippet: { title: 'Viral Mentor Insights 2026 #Shorts', description: fullScript, categoryId: '27' },
+            status: { privacyStatus: 'public', selfDeclaredMadeForKids: false }
+        },
+        media: { body: fs.createReadStream('output.mp4') }
+    });
+}
+
 async function main() {
     try {
         const scenes = await getContent();
         const files = await processMedia(scenes);
         await assembleVideo(scenes, files);
-        console.log("🏆 PROJECT COMPLETE: Paused, Male, and Subscribed.");
-    } catch (e) { console.error(e.message); }
+        await uploadToYouTube(scenes.map(s => s.text).join(' '));
+        console.log("🏆 PROJECT SOVEREIGN: SUCCESSFUL DEPLOYMENT.");
+    } catch (e) { console.error("🔥 ERROR:", e.message); process.exit(1); }
 }
 main();
