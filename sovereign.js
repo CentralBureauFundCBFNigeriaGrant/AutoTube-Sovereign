@@ -1,7 +1,11 @@
 // ===================================================================
-// 🛰️ AUTO-TUBE SOVEREIGN V11 - GOOGLE TTS GODZILLA EDITION
+// 🛰️ AUTO-TUBE SOVEREIGN V11.1 - GODZILLA PATCHED
 // ===================================================================
-// Perfect Voice. Perfect Timing. 60 Seconds Guaranteed.
+// - Strict 20-scene limit
+// - Google TTS with credential sanitization
+// - SSML character escaping
+// - Plain‑text fallback for TTS
+// - Improved error visibility
 // ===================================================================
 
 const axios = require('axios');
@@ -20,6 +24,7 @@ const YT_REFRESH_TOKEN = process.env.YT_REFRESH_TOKEN;
 
 const TARGET_DURATION = 60;
 const BACKUP_VIDEO = 'backup.mp4';
+const SCENE_COUNT = 20; // Hard‑coded for 60s videos
 
 // ========== HELPER: ROBUST JSON PARSE ==========
 function robustJSONParse(text) {
@@ -31,20 +36,73 @@ function robustJSONParse(text) {
     } catch (e) { return null; }
 }
 
-// ========== STEP 1: GENERATE SCRIPT ==========
+// ========== SSML ESCAPE ==========
+function escapeSSML(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+// ========== SANITIZE GOOGLE CREDENTIALS ==========
+function getGoogleCredentials() {
+    const creds = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (!creds) {
+        throw new Error('GOOGLE_APPLICATION_CREDENTIALS is not set.');
+    }
+    // If it's a file path, read it; otherwise treat as JSON string
+    if (fs.existsSync(creds)) {
+        return JSON.parse(fs.readFileSync(creds, 'utf8'));
+    }
+    // Attempt to parse as JSON, with trimming
+    try {
+        return JSON.parse(creds.trim());
+    } catch (e) {
+        console.error('❌ Invalid JSON in GOOGLE_APPLICATION_CREDENTIALS:');
+        console.error(creds.substring(0, 100) + '...');
+        throw new Error('Credentials are not valid JSON.');
+    }
+}
+
+// ========== STEP 1: GENERATE SCRIPT (STRICT 20 SCENES) ==========
 async function getContent(topic = "How to go viral on YouTube in 2026") {
-    console.log("🧠 Generating Nigerian Mentor script...");
+    console.log("🧠 Generating Nigerian Mentor script (strict 20 scenes)...");
+    const backupScenes = [
+        { text: "Stop posting trash!", keyword: "angry mentor" },
+        { text: "Want viral videos?", keyword: "youtube studio" },
+        { text: "Here is the secret.", keyword: "secret document" },
+        { text: "Watch time is king.", keyword: "stopwatch" },
+        { text: "Hook in 3 seconds.", keyword: "fishing hook" },
+        { text: "Then deliver value.", keyword: "gift box" },
+        { text: "Use pattern interrupts.", keyword: "glitch effect" },
+        { text: "Keep them curious.", keyword: "question mark" },
+        { text: "Never be boring.", keyword: "party crowd" },
+        { text: "Edit for retention.", keyword: "video editing" },
+        { text: "Cut the fluff.", keyword: "scissors" },
+        { text: "Use text on screen.", keyword: "text animation" },
+        { text: "Sound design matters.", keyword: "audio mixer" },
+        { text: "Tell a story.", keyword: "storytelling" },
+        { text: "Be relatable.", keyword: "friends laughing" },
+        { text: "Show the result.", keyword: "trophy" },
+        { text: "Build anticipation.", keyword: "drum roll" },
+        { text: "Overdeliver value.", keyword: "treasure" },
+        { text: "That's the blueprint.", keyword: "blueprint" },
+        { text: "Subscribe for more viral secrets!", keyword: "subscribe button" }
+    ];
+
     try {
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama-3.1-8b-instant",
             messages: [{
                 role: "system",
-                content: `You are a Male Nigerian Mentor. Create a 60-second video script.
+                content: `You are a Male Nigerian Mentor. Create a 60‑second video script.
                 RULES:
-                - EXACTLY 20 scenes (each ~3 seconds).
-                - Each scene 3-5 words.
-                - First scene: punchy hook. Last scene: "Subscribe for more viral secrets!"
-                Return JSON: {"scenes": [{"text": "...", "keyword": "..."}]}`
+                - EXACTLY ${SCENE_COUNT} scenes. No more, no less.
+                - Each scene 3-5 words max.
+                - First scene is a punchy hook. Last scene is "Subscribe for more viral secrets!"
+                - Return ONLY valid JSON: {"scenes": [{"text": "...", "keyword": "..."}]}`
             }, {
                 role: "user",
                 content: `Topic: ${topic}`
@@ -57,40 +115,28 @@ async function getContent(topic = "How to go viral on YouTube in 2026") {
         });
 
         const data = robustJSONParse(response.data.choices[0].message.content);
-        if (data?.scenes && data.scenes.length >= 18) {
-            console.log(`✅ Script ready: ${data.scenes.length} scenes.`);
-            return data.scenes;
+        if (data?.scenes && Array.isArray(data.scenes)) {
+            let scenes = data.scenes;
+            if (scenes.length > SCENE_COUNT) {
+                console.warn(`⚠️ AI returned ${scenes.length} scenes. Trimming to ${SCENE_COUNT}.`);
+                scenes = scenes.slice(0, SCENE_COUNT);
+            } else if (scenes.length < SCENE_COUNT) {
+                console.warn(`⚠️ AI returned only ${scenes.length} scenes. Padding with backup.`);
+                while (scenes.length < SCENE_COUNT) {
+                    scenes.push(backupScenes[scenes.length % backupScenes.length]);
+                }
+            }
+            console.log(`✅ Script ready: ${scenes.length} scenes.`);
+            return scenes;
         }
-        throw new Error("Invalid scene count.");
+        throw new Error("Invalid AI response structure.");
     } catch (e) {
-        console.warn("⚠️ AI failed. Using emergency script.");
-        // 20‑scene backup
-        return [
-            { text: "Stop posting trash!", keyword: "angry mentor" },
-            { text: "Want viral videos?", keyword: "youtube studio" },
-            { text: "Here is the secret.", keyword: "secret document" },
-            { text: "Watch time is king.", keyword: "stopwatch" },
-            { text: "Hook in 3 seconds.", keyword: "fishing hook" },
-            { text: "Then deliver value.", keyword: "gift box" },
-            { text: "Use pattern interrupts.", keyword: "glitch effect" },
-            { text: "Keep them curious.", keyword: "question mark" },
-            { text: "Never be boring.", keyword: "party crowd" },
-            { text: "Edit for retention.", keyword: "video editing" },
-            { text: "Cut the fluff.", keyword: "scissors" },
-            { text: "Use text on screen.", keyword: "text animation" },
-            { text: "Sound design matters.", keyword: "audio mixer" },
-            { text: "Tell a story.", keyword: "storytelling" },
-            { text: "Be relatable.", keyword: "friends laughing" },
-            { text: "Show the result.", keyword: "trophy" },
-            { text: "Build anticipation.", keyword: "drum roll" },
-            { text: "Overdeliver value.", keyword: "treasure" },
-            { text: "That's the blueprint.", keyword: "blueprint" },
-            { text: "Subscribe for more viral secrets!", keyword: "subscribe button" }
-        ];
+        console.warn("⚠️ AI failed. Using emergency backup script (20 scenes).");
+        return backupScenes.slice(0, SCENE_COUNT);
     }
 }
 
-// ========== STEP 2: DOWNLOAD CLIPS (SAME AS BEFORE) ==========
+// ========== STEP 2: DOWNLOAD CLIPS (PEXELS → PIXABAY → BACKUP) ==========
 async function downloadClip(scene, index) {
     const filename = `clip_${index}.mp4`;
     const downloadFromUrl = async (url) => {
@@ -111,7 +157,7 @@ async function downloadClip(scene, index) {
                 headers: { 'Authorization': PEXELS_KEY },
                 timeout: 8000
             });
-            const video = res.data.videos?.[0]?.video_files.find(f => f.quality === 'hd');
+            const video = res.data.videos?.[0]?.video_files.find(f => f.quality === 'hd' || f.height >= 720);
             if (video) {
                 await downloadFromUrl(video.link);
                 console.log(`   🎬 Clip ${index}: Pexels`);
@@ -150,66 +196,87 @@ async function processMedia(scenes) {
     return scenes.map((_, i) => `clip_${i}.mp4`);
 }
 
-// ========== STEP 3: GOOGLE CLOUD TTS WITH WORD TIMINGS ==========
+// ========== STEP 3: GOOGLE TTS WITH PROPER SSML AND FALLBACK ==========
 async function generateVoiceover(scenes) {
     console.log("🔊 Generating Google Cloud TTS voiceover...");
-    const client = new textToSpeech.TextToSpeechClient();
 
-    // Build SSML with <mark> tags for each word to get precise timings
+    // Sanitize credentials first
+    const credentials = getGoogleCredentials();
+    const client = new textToSpeech.TextToSpeechClient({ credentials });
+
+    // Build SSML with escapes and <mark> tags
     let ssml = '<speak>';
     scenes.forEach((scene, sceneIdx) => {
         const words = scene.text.split(' ');
         words.forEach((word, wordIdx) => {
-            // Clean word for SSML
-            const cleanWord = word.replace(/[^a-zA-Z0-9']/g, '');
+            const cleanWord = word.replace(/[^\w']/g, ''); // keep letters, numbers, apostrophe
             if (cleanWord) {
-                ssml += `<mark name="s${sceneIdx}w${wordIdx}"/>${cleanWord} `;
+                const escapedWord = escapeSSML(cleanWord);
+                ssml += `<mark name="s${sceneIdx}w${wordIdx}"/>${escapedWord} `;
             }
         });
-        // Add a 300ms pause between scenes (natural breathing)
         if (sceneIdx < scenes.length - 1) {
             ssml += '<break time="300ms"/>';
         }
     });
     ssml += '</speak>';
 
-    // Request with Nigerian Male voice and timepoint tracking
-    const [response] = await client.synthesizeSpeech({
-        input: { ssml },
-        voice: {
-            languageCode: 'en-NG',
-            name: 'en-NG-Standard-B',  // Male Nigerian voice
-            ssmlGender: 'MALE'
-        },
-        audioConfig: {
-            audioEncoding: 'MP3',
-            speakingRate: 1.0,  // Adjust to hit 60s
-            pitch: 0.0
-        },
-        enableTimePointing: ['SSML_MARK']
-    });
+    // Write SSML to file for debugging
+    fs.writeFileSync('debug.ssml', ssml);
+    console.log('   📝 SSML written to debug.ssml');
 
-    // Write audio file
+    let response;
+    try {
+        // Attempt SSML synthesis
+        [response] = await client.synthesizeSpeech({
+            input: { ssml },
+            voice: {
+                languageCode: 'en-NG',
+                name: 'en-NG-Standard-B',
+                ssmlGender: 'MALE'
+            },
+            audioConfig: {
+                audioEncoding: 'MP3',
+                speakingRate: 1.0,
+                pitch: 0.0
+            },
+            enableTimePointing: ['SSML_MARK']
+        });
+    } catch (ssmlError) {
+        console.error('   ❌ SSML synthesis failed:', ssmlError.message);
+        console.log('   🔄 Falling back to plain text TTS...');
+
+        // Fallback to plain text (no SSML, no word timings)
+        const plainText = scenes.map(s => s.text).join('. ');
+        [response] = await client.synthesizeSpeech({
+            input: { text: plainText },
+            voice: {
+                languageCode: 'en-NG',
+                name: 'en-NG-Standard-B',
+                ssmlGender: 'MALE'
+            },
+            audioConfig: {
+                audioEncoding: 'MP3',
+                speakingRate: 1.0,
+                pitch: 0.0
+            }
+            // No timepoints in plain text mode
+        });
+        console.log('   ⚠️ Plain text TTS used – subtitles will be evenly spaced.');
+    }
+
+    // Write audio
     fs.writeFileSync('voice.mp3', response.audioContent, 'binary');
     console.log('   ✅ Voiceover generated.');
 
-    // Parse timepoints to get word-level timings
-    const timepoints = response.timepoints || [];
-    const wordTimings = timepoints.map(tp => ({
-        mark: tp.markName,
-        timeSeconds: parseFloat(tp.timeSeconds)
-    }));
-
-    // Save timings to JSON for later use in subtitles
-    fs.writeFileSync('timings.json', JSON.stringify(wordTimings, null, 2));
-    console.log(`   ⏱️ Word timings captured (${wordTimings.length} words).`);
-
-    // Get audio duration
-    const dur = parseFloat(execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`).toString());
+    // Get duration
+    const dur = parseFloat(execSync(
+        `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`
+    ).toString());
     console.log(`   ⏱️ Voice duration: ${dur.toFixed(1)}s`);
 
-    // Adjust speaking rate if not within 55-65 seconds
-    if (dur < 55 || dur > 65) {
+    // Adjust speaking rate if needed (only if we have timepoints to regenerate)
+    if (response.timepoints && response.timepoints.length > 0 && (dur < 55 || dur > 65)) {
         console.log(`   🔁 Adjusting speaking rate to hit 60s target...`);
         const rateAdjust = 60 / dur;
         const newRate = Math.min(1.5, Math.max(0.7, rateAdjust));
@@ -229,52 +296,75 @@ async function generateVoiceover(scenes) {
             enableTimePointing: ['SSML_MARK']
         });
         fs.writeFileSync('voice.mp3', adjustedResp.audioContent, 'binary');
-        const newDur = parseFloat(execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`).toString());
+        const newDur = parseFloat(execSync(
+            `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`
+        ).toString());
         console.log(`   ✅ Adjusted duration: ${newDur.toFixed(1)}s`);
+        response = adjustedResp;
+    }
+
+    // Save timepoints if available
+    if (response.timepoints) {
+        const timings = response.timepoints.map(tp => ({
+            mark: tp.markName,
+            timeSeconds: parseFloat(tp.timeSeconds)
+        }));
+        fs.writeFileSync('timings.json', JSON.stringify(timings, null, 2));
+        console.log(`   ⏱️ Word timings saved (${timings.length} marks).`);
+    } else {
+        // Create dummy timings for subtitle generation
+        console.log('   📋 Creating fallback timings (equal word spacing).');
+        const words = scenes.flatMap((s, idx) => s.text.split(' ').map((w, widx) => ({
+            mark: `s${idx}w${widx}`,
+            timeSeconds: (idx / scenes.length) * dur + (widx * 0.3) // rough estimate
+        })));
+        fs.writeFileSync('timings.json', JSON.stringify(words, null, 2));
     }
 }
 
-// ========== STEP 4: ASSEMBLE VIDEO WITH PERFECT WORD-LEVEL SUBTITLES ==========
+// ========== STEP 4: ASSEMBLE VIDEO WITH SUBTITLES ==========
 async function assembleVideo(scenes, videoFiles) {
-    console.log("🎞️ Assembling final video with Google TTS timings...");
+    console.log("🎞️ Assembling final video...");
 
     const audioPath = 'voice.mp3';
     const bgMusicPath = 'bg.mp3';
-    const audioDur = parseFloat(execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ${audioPath}`).toString());
+    const audioDur = parseFloat(execSync(
+        `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ${audioPath}`
+    ).toString());
     const clipDuration = audioDur / scenes.length;
 
-    // Create concat file
+    // Concat file
     let concatList = videoFiles.map(f => `file '${f}'\nduration ${clipDuration}`).join('\n');
     concatList += `\nfile '${videoFiles[videoFiles.length-1]}'`;
     fs.writeFileSync('inputs.txt', concatList);
 
-    // Load word timings
-    const timings = JSON.parse(fs.readFileSync('timings.json', 'utf8'));
-
-    // Build filter graph with exact enable times from Google TTS marks
     const fontPath = "./fonts/Anton.ttf";
     let filterComplex = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
 
-    // Group timings by scene (marks are like "s0w0", "s0w1", ...)
+    // Load timings
+    const timings = JSON.parse(fs.readFileSync('timings.json', 'utf8'));
+
+    // Map marks to scenes/words
     const sceneWordMap = {};
     timings.forEach(tp => {
         const match = tp.mark.match(/s(\d+)w(\d+)/);
         if (match) {
-            const sceneIdx = parseInt(match[1]);
-            const wordIdx = parseInt(match[2]);
-            if (!sceneWordMap[sceneIdx]) sceneWordMap[sceneIdx] = [];
-            sceneWordMap[sceneIdx].push({
+            const sIdx = parseInt(match[1]);
+            const wIdx = parseInt(match[2]);
+            if (!sceneWordMap[sIdx]) sceneWordMap[sIdx] = [];
+            sceneWordMap[sIdx][wIdx] = {
                 time: tp.timeSeconds,
-                text: scenes[sceneIdx].text.split(' ')[wordIdx]
-            });
+                text: scenes[sIdx]?.text.split(' ')[wIdx] || ''
+            };
         }
     });
 
-    // For each scene, add drawtext filters for each word
+    // Add drawtext filters
     for (let sIdx = 0; sIdx < scenes.length; sIdx++) {
         const words = sceneWordMap[sIdx] || [];
         for (let wIdx = 0; wIdx < words.length; wIdx++) {
             const current = words[wIdx];
+            if (!current) continue;
             const next = words[wIdx + 1];
             const startTime = current.time;
             const endTime = next ? next.time : (sIdx < scenes.length - 1 ? sceneWordMap[sIdx+1]?.[0]?.time : audioDur);
@@ -301,10 +391,9 @@ async function assembleVideo(scenes, videoFiles) {
     const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt ${audioInputs} -filter_complex_script filters.txt -map "[outv]" ${audioMap} -c:v libx264 -preset fast -crf 22 -t ${audioDur} -c:a aac -b:a 128k -movflags +faststart -shortest output.mp4`;
     execSync(cmd, { stdio: 'inherit' });
     console.log(`✅ Video ready: output.mp4 (${Math.round(audioDur)} seconds)`);
-    return audioDur;
 }
 
-// ========== STEP 5: UPLOAD TO YOUTUBE ==========
+// ========== STEP 5: YOUTUBE UPLOAD ==========
 async function uploadToYouTube(videoPath, title, description) {
     console.log("📤 Uploading to YouTube...");
     const oauth2Client = new google.auth.OAuth2(YT_CLIENT_ID, YT_CLIENT_SECRET);
@@ -325,18 +414,19 @@ async function uploadToYouTube(videoPath, title, description) {
 // ========== MAIN ==========
 async function main() {
     try {
-        console.log("🛰️ GODZILLA MODE (Google TTS) ACTIVATED");
+        console.log("🛰️ GODZILLA V11.1 ACTIVATED (PATCHED)");
         const scenes = await getContent();
         const files = await processMedia(scenes);
         await generateVoiceover(scenes);
         await assembleVideo(scenes, files);
-        
+
         const title = `🔥 Viral Secrets in 60s (${new Date().toLocaleDateString()}) #Shorts`;
         const desc = `Nigerian Mentor drops the blueprint.\n👉 Subscribe for more.`;
         await uploadToYouTube('output.mp4', title, desc);
         console.log("🏆 MISSION COMPLETE.");
     } catch (e) {
         console.error("🔥 CRITICAL ERROR:", e.message);
+        console.error(e.stack);
         process.exit(1);
     }
 }
