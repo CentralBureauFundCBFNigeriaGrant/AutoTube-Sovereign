@@ -1,18 +1,16 @@
 // ===================================================================
-// 🛰️ AUTO-TUBE SOVEREIGN V12.0 - FREE TTS GODZILLA (EDGE TTS + WHISPER)
+// 🛰️ AUTO-TUBE SOVEREIGN V12.1 - EDGE TTS WORD-PERFECT GODZILLA
 // ===================================================================
-// - NO Google Cloud / Billing Required
+// - Uses Edge TTS built‑in word‑boundary for frame‑perfect subtitles
+// - No Google Cloud / Aeneas / Extra Python required
 // - Forces Exactly 20 Scenes for 60s Video
-// - Uses Edge TTS for Perfect Male Nigerian Voice (Abeo)
-// - Uses Aeneas to Force Frame-Perfect Subtitle Alignment
-// - 100% Free & Works on GitHub Actions
+// - 100% Free & Reliable on GitHub Actions
 // ===================================================================
 
 const axios = require('axios');
 const fs = require('fs');
 const { execSync } = require('child_process');
 const { google } = require('googleapis');
-const path = require('path');
 
 // ========== CONFIGURATION ==========
 const GROQ_KEY = process.env.GROQ_API_KEY;
@@ -22,12 +20,12 @@ const YT_CLIENT_ID = process.env.YT_CLIENT_ID;
 const YT_CLIENT_SECRET = process.env.YT_CLIENT_SECRET;
 const YT_REFRESH_TOKEN = process.env.YT_REFRESH_TOKEN;
 
-const TARGET_DURATION = 60; // seconds
+const TARGET_DURATION = 60;
 const BACKUP_VIDEO = 'backup.mp4';
-const SCENE_COUNT = 20; // Hard‑coded for 60s videos
+const SCENE_COUNT = 20;
 const TTS_VOICE = 'en-NG-AbeoNeural'; // Nigerian Male Voice
 
-// ========== HELPER: ROBUST JSON PARSE ==========
+// ========== ROBUST JSON PARSE ==========
 function robustJSONParse(text) {
     try {
         const start = text.indexOf('{');
@@ -107,7 +105,7 @@ async function getContent(topic = "How to go viral on YouTube in 2026") {
     }
 }
 
-// ========== STEP 2: DOWNLOAD CLIPS (PEXELS → PIXABAY → BACKUP) ==========
+// ========== STEP 2: DOWNLOAD CLIPS ==========
 async function downloadClip(scene, index) {
     const filename = `clip_${index}.mp4`;
     const downloadFromUrl = async (url) => {
@@ -167,22 +165,22 @@ async function processMedia(scenes) {
     return scenes.map((_, i) => `clip_${i}.mp4`);
 }
 
-// ========== STEP 3: GENERATE PERFECT 60S VOICEOVER WITH EDGE TTS ==========
+// ========== STEP 3: GENERATE VOICEOVER + WORD BOUNDARIES WITH EDGE TTS ==========
 async function generateVoiceover(scenes) {
     console.log("🔊 Generating perfect 60s Nigerian Male voiceover with Edge TTS...");
 
-    // 1. Create plain text file with natural pauses (newlines = ~300ms pause)
-    const plainTextLines = scenes.map(scene => scene.text);
-    const plainText = plainTextLines.join('\n'); // Newline forces a natural break in Edge TTS
+    // 1. Create plain text file (newlines create natural pauses)
+    const plainText = scenes.map(scene => scene.text).join('\n');
     fs.writeFileSync('script.txt', plainText);
     console.log("   📝 Plain text script written.");
 
-    // 2. Function to generate voiceover with a specific rate
+    // Helper to synthesize with a specific rate and capture word boundaries
     const synthesize = (ratePercent) => {
-        // Clean up any previous files
         try { fs.unlinkSync('voice.mp3'); } catch (e) {}
+        try { fs.unlinkSync('boundaries.json'); } catch (e) {}
         const rateArg = `${ratePercent > 0 ? '+' : ''}${ratePercent}%`;
-        const cmd = `edge-tts --voice ${TTS_VOICE} --file script.txt --write-media voice.mp3 --rate=${rateArg}`;
+        // --word-boundary writes a JSON file with precise word timings
+        const cmd = `edge-tts --voice ${TTS_VOICE} --file script.txt --write-media voice.mp3 --rate=${rateArg} --word-boundary boundaries.json`;
         execSync(cmd, { stdio: 'pipe' });
         const dur = parseFloat(execSync(
             `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`
@@ -190,21 +188,20 @@ async function generateVoiceover(scenes) {
         return dur;
     };
 
-    // 3. Iterate to hit exactly 60 seconds
-    let currentRate = 0; // Start at normal speed
+    // 2. Iterate to hit exactly 60 seconds
+    let currentRate = 0;
     let duration = synthesize(currentRate);
     console.log(`   ⏱️ Initial duration (${currentRate}% rate): ${duration.toFixed(1)}s`);
 
     if (duration < 55 || duration > 65) {
         console.log("   🔁 Adjusting speaking rate to hit exactly 60s...");
-        // Edge TTS rate range: -50% to +100%. Adjust proportionally.
         const targetRate = Math.round((60 / duration - 1) * 100);
         const adjustedRate = Math.min(100, Math.max(-50, targetRate));
         console.log(`   🎚️ Trying rate: ${adjustedRate}%`);
         duration = synthesize(adjustedRate);
         console.log(`   ✅ New duration: ${duration.toFixed(1)}s`);
         
-        // If still off, try one more fine-tuning step
+        // Fine-tune if still off
         if (duration < 55 || duration > 65) {
             const fineTuneRate = Math.round(adjustedRate + (60 / duration - 1) * 100);
             const finalRate = Math.min(100, Math.max(-50, fineTuneRate));
@@ -214,36 +211,12 @@ async function generateVoiceover(scenes) {
         }
     }
     
-    console.log(`   🔈 Voiceover ready.`);
-
-    // 4. Generate word timings using Aeneas (force alignment)
-    console.log("   📋 Generating word-by-word subtitle timings with aeneas...");
-    try {
-        // Create a basic SRT file first (Edge TTS can output a simple one)
-        execSync(`edge-tts --voice ${TTS_VOICE} --file script.txt --write-subtitles subtitles.vtt`, { stdio: 'pipe' });
-        
-        // Use aeneas to force-align word-level timings
-        // The mapping file tells aeneas to align the whole plain text to the audio
-        const mapping = `general\nplain\nscript.txt|voice.mp3\n`;
-        fs.writeFileSync('mapping.txt', mapping);
-        
-        // Run aeneas to generate a SMIL file with precise word timings
-        execSync(`python3 -m aeneas.tools.execute_task voice.mp3 script.txt "task_language=eng|os_task_file_format=json|is_text_type=plain" timings.json`, { stdio: 'pipe' });
-        console.log("   ✅ Word timings generated.");
-    } catch (e) {
-        console.error("   ⚠️ Aeneas alignment failed. Using evenly-spaced subtitles as fallback.");
-        // Fallback: create dummy timings file (1 word per second)
-        const words = scenes.flatMap((s, idx) => s.text.split(' ').map((w, widx) => ({
-            mark: `s${idx}w${widx}`,
-            timeSeconds: (idx / scenes.length) * duration + (widx * 0.3)
-        })));
-        fs.writeFileSync('timings.json', JSON.stringify(words, null, 2));
-    }
+    console.log(`   🔈 Voiceover ready. Word boundaries saved.`);
 }
 
-// ========== STEP 4: ASSEMBLE VIDEO WITH SUBTITLES ==========
+// ========== STEP 4: ASSEMBLE VIDEO WITH PERFECT SUBTITLES ==========
 async function assembleVideo(scenes, videoFiles) {
-    console.log("🎞️ Assembling final video...");
+    console.log("🎞️ Assembling final video with word‑perfect subtitles...");
 
     const audioPath = 'voice.mp3';
     const bgMusicPath = 'bg.mp3';
@@ -260,46 +233,32 @@ async function assembleVideo(scenes, videoFiles) {
     const fontPath = "./fonts/Anton.ttf";
     let filterComplex = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
 
-    // Load word timings from aeneas JSON output
-    let timings = [];
+    // Load word boundaries from Edge TTS JSON
+    let boundaries;
     try {
-        const aeneasOutput = JSON.parse(fs.readFileSync('timings.json', 'utf8'));
-        // Aeneas output structure: { "fragments": [ { "begin": "0.00", "end": "0.50", "lines": ["word"] } ] }
-        timings = aeneasOutput.fragments.map(f => ({
-            timeSeconds: parseFloat(f.begin),
-            text: f.lines[0]
-        }));
+        boundaries = JSON.parse(fs.readFileSync('boundaries.json', 'utf8'));
     } catch (e) {
-        // Fallback to evenly spaced timings if JSON is invalid
-        const words = scenes.flatMap((s, idx) => s.text.split(' ').map(w => w));
+        console.error("   ❌ Failed to parse boundaries.json. Using fallback timing.");
+        // Fallback: evenly spaced subtitles
+        const words = scenes.flatMap(s => s.text.split(' ').filter(w => w.length > 0));
         const wordDur = audioDur / words.length;
-        timings = words.map((w, i) => ({
-            timeSeconds: i * wordDur,
-            text: w
+        boundaries = words.map((word, i) => ({
+            text: word,
+            offset: i * wordDur * 1e7, // Edge TTS uses 100-nanosecond units
+            duration: wordDur * 1e7
         }));
     }
 
-    // Map marks to scenes/words (we need to reconstruct scene/word indices from plain text)
-    let wordIndex = 0;
-    for (let sIdx = 0; sIdx < scenes.length; sIdx++) {
-        const sceneWords = scenes[sIdx].text.split(' ');
-        for (let wIdx = 0; wIdx < sceneWords.length; wIdx++) {
-            const current = timings[wordIndex];
-            const next = timings[wordIndex + 1];
-            if (!current) continue;
-            
-            const startTime = current.timeSeconds;
-            const endTime = next ? next.timeSeconds : (sIdx < scenes.length - 1 ? timings[wordIndex + 1]?.timeSeconds : audioDur);
-            if (!endTime) continue;
+    // Convert boundaries to seconds and build drawtext filters
+    boundaries.forEach((item) => {
+        // Edge TTS word boundary format: { "text": "...", "offset": nanoseconds/100, "duration": ... }
+        const startSec = (item.offset || 0) / 1e7;
+        const endSec = startSec + (item.duration || 0) / 1e7;
+        const cleanWord = item.text.toUpperCase().replace(/[^A-Z0-9']/g, '');
+        if (!cleanWord) return;
 
-            const cleanWord = current.text.toUpperCase().replace(/[^A-Z0-9']/g, '');
-            if (!cleanWord) continue;
-
-            filterComplex += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=180:x=(w-text_w)/2:y=(h-text_h)/2:borderw=8:bordercolor=black:enable='between(t,${startTime.toFixed(2)},${endTime.toFixed(2)})'`;
-            
-            wordIndex++;
-        }
-    }
+        filterComplex += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=180:x=(w-text_w)/2:y=(h-text_h)/2:borderw=8:bordercolor=black:enable='between(t,${startSec.toFixed(2)},${endSec.toFixed(2)})'`;
+    });
 
     filterComplex += `[outv];`;
 
@@ -338,7 +297,7 @@ async function uploadToYouTube(videoPath, title, description) {
 // ========== MAIN ==========
 async function main() {
     try {
-        console.log("🛰️ GODZILLA V12.0 ACTIVATED (FREE TTS EDITION)");
+        console.log("🛰️ GODZILLA V12.1 ACTIVATED (EDGE TTS WORD-PERFECT)");
         const scenes = await getContent();
         const files = await processMedia(scenes);
         await generateVoiceover(scenes);
