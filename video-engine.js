@@ -12,7 +12,7 @@ const YT_CLIENT_SECRET = process.env.YT_CLIENT_SECRET;
 const YT_REFRESH_TOKEN = process.env.YT_REFRESH_TOKEN;
 
 /**
- * FIXED ROBUST PARSE: Handles truncated or messy AI responses.
+ * ROBUST PARSE: Cleans AI junk from JSON responses
  */
 function robustJSONParse(text) {
     try {
@@ -21,10 +21,7 @@ function robustJSONParse(text) {
         if (start === -1 || end === -1) return null;
         const cleaned = text.substring(start, end + 1);
         return JSON.parse(cleaned);
-    } catch (e) { 
-        console.error("⚠️ JSON structure was incomplete. Retrying...");
-        return null; 
-    }
+    } catch (e) { return null; }
 }
 
 /**
@@ -41,38 +38,37 @@ async function getContent() {
                 messages: [
                     { 
                         role: "system", 
-                        content: `You are a Nigerian YouTube Mentor. You speak in short, impactful phrases.
+                        content: `You are an expert Nigerian YouTube Mentor. You speak in short, impactful bursts.
                         RULES:
                         1. SCENES: Exactly 35 scenes.
                         2. TEXT: 3-5 words per scene.
-                        3. PACING: Use commas (,) and ellipses (...) for natural pauses.
-                        4. KEYWORDS: Direct physical terms (e.g., 'smartphone', 'bright office', 'money').
-                        Return ONLY JSON: {"scenes": [{"text": "Scene text...", "keyword": "query"}]}` 
+                        3. PACING: Use commas (,) and ellipses (...) for natural teaching pauses.
+                        4. KEYWORDS: Physical visual terms for Pexels (e.g., 'professional studio', 'gold trophy', 'fast city').
+                        Return ONLY JSON: {"scenes": [{"text": "First punchy phrase...", "keyword": "visual_query"}]}` 
                     },
                     { role: "user", content: `Topic: ${topic}` }
                 ],
-                max_tokens: 2000,
                 response_format: { type: "json_object" }
             }, { headers: { 'Authorization': `Bearer ${key}` }, timeout: 40000 });
 
             const data = robustJSONParse(response.data.choices[0].message.content);
             if (data && data.scenes && data.scenes.length > 20) return data.scenes;
-        } catch (e) { console.warn("⚠️ API struggle... trying next key."); }
+        } catch (e) { console.warn("⚠️ API retry..."); }
     }
-    throw new Error("CRITICAL: Script failed. Verify API keys and limits.");
+    throw new Error("CRITICAL: Script failed.");
 }
 
 /**
- * STEP 2 & 3: NIGERIAN VOICE & CLIP DOWNLOADS
+ * STEP 2 & 3: VOICE & CLIP DOWNLOADS
  */
 async function processMedia(scenes) {
-    console.log("🎙️ Step 2: Generating Nigerian Tutor Voice (-12% rate)...");
+    console.log("🎙️ Step 2: Generating Nigerian Tutor Voice (Ezinne)...");
     const fullScript = scenes.map(s => s.text).join(' ').replace(/["']/g, "");
     
-    // Using Ezinne for that authentic Nigerian Female Mentor sound
+    // Using Ezinne for the Nigerian accent at -12% speed for a relaxed mood
     execSync(`edge-tts --voice en-NG-EzinneNeural --text "${fullScript}" --write-media voice.mp3 --rate=-12%`);
 
-    console.log(`🎬 Step 3: Fetching 35 Viral Clips (Pexels First)...`);
+    console.log(`🎬 Step 3: Fetching Viral Clips (Pexels Priority)...`);
     const downloadClip = async (scene, i) => {
         let videoUrl = null;
         const query = encodeURIComponent(scene.keyword);
@@ -106,22 +102,22 @@ async function processMedia(scenes) {
 }
 
 /**
- * STEP 4: PRECISION ASSEMBLY (Anton Font + Fixed Regex)
+ * STEP 4: PRECISION ASSEMBLY (Fixes the filtergraph error)
  */
 async function assembleVideo(scenes, videoFiles) {
-    console.log("✂️ Step 4: Final Assembly (Anton Font + Word-for-Word)...");
+    console.log("✂️ Step 4: Final Assembly (Anton Font + Fixed Audio Logic)...");
     
     const audioDur = parseFloat(execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 voice.mp3`).toString());
-    const totalWords = scenes.map(s => s.text).join(' ').split(' ').length;
-    const timePerWord = audioDur / totalWords;
+    const totalWordsCount = scenes.map(s => s.text).join(' ').split(' ').length;
+    const timePerWord = audioDur / totalWordsCount;
 
     let concatList = "";
     videoFiles.forEach((file) => { concatList += `file '${file}'\nduration ${audioDur / scenes.length}\n`; });
     concatList += `file '${videoFiles[videoFiles.length-1]}'`;
     fs.writeFileSync('inputs.txt', concatList);
 
-    // ANTON STYLE: Yellow, Bold, Giant Outline
-    let filterString = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
+    // 1. Video Filters: Anton Style, Yellow, Giant Outline
+    let vFilter = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p";
     const fontPath = "./fonts/Anton.ttf";
     
     let currentTime = 0;
@@ -129,27 +125,35 @@ async function assembleVideo(scenes, videoFiles) {
         const words = scene.text.split(' ');
         words.forEach((word) => {
             const end = currentTime + timePerWord;
-            const cleanWord = word.toUpperCase().replace(/[^A-Z]/g, ""); // FIXED: Corrected regex flag
+            const cleanWord = word.toUpperCase().replace(/[^A-Z]/g, ""); 
             
             if (cleanWord.length > 0) {
-                filterString += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=180:x=(w-text_w)/2:y=(h-text_h)/2:borderw=25:bordercolor=black:enable='between(t,${currentTime.toFixed(2)},${end.toFixed(2)})'`;
+                vFilter += `,drawtext=fontfile='${fontPath}':text='${cleanWord}':fontcolor=yellow:fontsize=180:x=(w-text_w)/2:y=(h-text_h)/2:borderw=25:bordercolor=black:enable='between(t,${currentTime.toFixed(2)},${end.toFixed(2)})'`;
             }
             currentTime = end;
         });
     });
+    vFilter += "[outv]";
 
-    fs.writeFileSync('filters.txt', `${filterString}[outv]`);
+    // 2. Audio Logic: Handle background.mp3 existence
+    let aFilter = "";
+    let inputs = "-i inputs.txt -i voice.mp3";
+    let mapAudio = "-map 1:a"; // Default mapping if no music
 
-    let audioInput = "-i voice.mp3";
-    let audioFilter = '[1:a]copy[aout]';
     if (fs.existsSync('background.mp3')) {
-        audioInput = "-i voice.mp3 -i background.mp3";
-        audioFilter = '[2:a]volume=0.10,aloop=loop=-1:size=2e9[bg];[1:a][bg]amix=inputs=2:duration=first[aout]';
+        console.log("🎵 Mixing background music...");
+        inputs += " -i background.mp3";
+        // Mix voice (1:a) and looped background (2:a) at 10% volume
+        aFilter = ";[2:a]volume=0.10,aloop=loop=-1:size=2e9[bg];[1:a][bg]amix=inputs=2:duration=first[aout]";
+        mapAudio = "-map '[aout]'";
     }
 
-    const cmd = `ffmpeg -y -f concat -safe 0 -i inputs.txt ${audioInput} \
-        -filter_complex_script filters.txt -filter_complex "${audioFilter}" \
-        -map "[outv]" -map "[aout]" \
+    // Combine all filters into the script file
+    fs.writeFileSync('filters.txt', vFilter + aFilter);
+
+    const cmd = `ffmpeg -y -f concat -safe 0 ${inputs} \
+        -filter_complex_script filters.txt \
+        -map "[outv]" ${mapAudio} \
         -c:v libx264 -preset ultrafast -t ${audioDur} -c:a aac output.mp4`;
     
     execSync(cmd, { stdio: 'inherit' });
@@ -182,11 +186,11 @@ async function main() {
         const videoFiles = await processMedia(scenes);
         await assembleVideo(scenes, videoFiles);
         await uploadToYouTube(scenes.map(s => s.text).join(' '));
-        console.log(`🏆 SUCCESS! Sovereign Engine finished with perfect sync.`);
+        console.log(`🏆 SUCCESS! Video is live with Nigerian voice and perfect subtitles.`);
     } catch (e) {
         console.error("🔥 ERROR:", e.message);
         process.exit(1);
     }
 }
 main();
-    
+         
